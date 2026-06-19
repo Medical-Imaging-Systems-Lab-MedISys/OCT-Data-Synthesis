@@ -7,13 +7,14 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=cgan_nr206_%j.out
 #SBATCH --error=cgan_nr206_%j.err
+#SBATCH --chdir=/data/vds/mmk/Codes/oct_data_synthesis/   # Ensure job starts from the correct directory
 
 # 1. Environment Initialization (LMod + Conda)
 module purge
 module load Miniforge3/26.1.1-3
 
-# TODO: Replace '/data/team-xxx/env_pt' with your actual environment path on the cluster
-source activate /data/team-xxx/env_pt
+# Activate your cluster conda environment
+source activate /data/vds/env_pt
 
 # 2. Optional: Stage dataset to local NVMe /tmp for I/O Optimization (highly recommended on this cluster)
 # To use, uncomment the lines below and ensure your config.json references the staged directories:
