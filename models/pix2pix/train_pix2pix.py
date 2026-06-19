@@ -300,6 +300,13 @@ def tensor_to_numpy(grid_tensor):
     np_grid = ((np_grid * 0.5 + 0.5) * 255).astype(np.uint8)
     return np_grid
 
+def prob_tensor_to_numpy(grid_tensor):
+    np_grid = grid_tensor.cpu().numpy()
+    np_grid = np.transpose(np_grid, (1, 2, 0))
+    # Scale [0, 1] -> [0, 255]
+    np_grid = (np_grid * 255).astype(np.uint8)
+    return np_grid
+
 def verify_setup(config):
     """
     Verifies that the entire network forward/backward pipeline is working
@@ -526,13 +533,38 @@ def main():
             mlflow.log_metric("g_loss", mean_g_loss, step=epoch)
             mlflow.log_metric("d_loss", mean_d_loss, step=epoch)
             
-            # Periodically save test visuals
+            # Periodically save test visuals (inputs & outputs of generator & discriminator)
             generator.eval()
+            discriminator.eval()
             with torch.no_grad():
                 test_fakes = generator(test_synth_imgs)
+                
+                # Discriminator output on real pair
+                test_real_pair = torch.cat([test_synth_imgs, test_real_imgs], dim=1)
+                test_pred_real_logits = discriminator(test_real_pair)
+                test_pred_real_probs = torch.sigmoid(test_pred_real_logits)
+                
+                # Discriminator output on fake pair
+                test_fake_pair = torch.cat([test_synth_imgs, test_fakes], dim=1)
+                test_pred_fake_logits = discriminator(test_fake_pair)
+                test_pred_fake_probs = torch.sigmoid(test_pred_fake_logits)
+                
+                # Resize patch-grid probability maps to original image size
+                H, W = test_synth_imgs.shape[2], test_synth_imgs.shape[3]
+                test_pred_real_resized = nn.functional.interpolate(
+                    test_pred_real_probs, size=(H, W), mode='bilinear', align_corners=False
+                )
+                test_pred_fake_resized = nn.functional.interpolate(
+                    test_pred_fake_probs, size=(H, W), mode='bilinear', align_corners=False
+                )
             
-            test_fakes_grid = vutils.make_grid(test_fakes, nrow=4, normalize=True)
+            test_fakes_grid = vutils.make_grid(test_fakes[:16], nrow=4, normalize=True)
+            test_disc_real_grid = vutils.make_grid(test_pred_real_resized[:16], nrow=4, normalize=False)
+            test_disc_fake_grid = vutils.make_grid(test_pred_fake_resized[:16], nrow=4, normalize=False)
+            
             mlflow.log_image(tensor_to_numpy(test_fakes_grid), f"validation_fakes_epoch_{epoch+1}.png")
+            mlflow.log_image(prob_tensor_to_numpy(test_disc_real_grid), f"validation_disc_prob_real_epoch_{epoch+1}.png")
+            mlflow.log_image(prob_tensor_to_numpy(test_disc_fake_grid), f"validation_disc_prob_fake_epoch_{epoch+1}.png")
             
             # Local visualization save & logging
             if epoch % 10 == 0 or epoch == epochs - 1:
