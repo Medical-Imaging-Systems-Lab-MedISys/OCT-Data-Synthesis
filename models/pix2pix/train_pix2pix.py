@@ -447,6 +447,11 @@ def main():
     optimizer_D = optim.Adam(discriminator.parameters(), lr=config['learning_rate'], betas=(config['beta1'], 0.999))
     
     # MLflow Setup
+    tracking_uri = config.get("mlflow_tracking_uri")
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+        print(f"Using remote MLflow tracking server: {tracking_uri}")
+
     mlflow.set_experiment(config['experiment_name'])
     run_name = f"Pix2Pix_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     

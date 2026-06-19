@@ -56,6 +56,11 @@ print('torch version:', torch.__version__)
 print('device:', device)
 
 # Define MLflow experiment and run name
+tracking_uri = config.get("mlflow_tracking_uri")
+if tracking_uri:
+    mlflow.set_tracking_uri(tracking_uri)
+    print(f"Using remote MLflow tracking server: {tracking_uri}")
+
 mlflow.set_experiment(experiment_name)
 run_name = f"{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 

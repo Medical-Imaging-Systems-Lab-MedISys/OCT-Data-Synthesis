@@ -97,3 +97,19 @@ To monitor your running jobs:
 ```bash
 squeue -u $USER
 ```
+
+---
+
+## 5. Remote MLflow Tracker Logging (DAGsHub)
+
+Both scripts are configured to log training configurations, metrics, and validation output images directly to your remote DAGsHub MLflow server:
+`https://dagshub.com/Mohan5353/OCT-Data-Synthesis.mlflow`
+
+To authenticate and enable writing to the remote tracker, you must export your DAGsHub credentials to your environment variables before running training:
+
+```bash
+export MLFLOW_TRACKING_USERNAME="Mohan5353"
+export MLFLOW_TRACKING_PASSWORD="YOUR_DAGSHUB_TOKEN"
+```
+*(You can generate your DAGsHub access token under DAGsHub Web -> Settings -> Tokens.)*
+
