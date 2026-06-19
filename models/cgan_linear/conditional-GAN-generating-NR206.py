@@ -112,9 +112,10 @@ class NR206Dataset(Dataset):
         img = Image.open(img_path).convert('L')
         mask = Image.open(mask_path).convert('L')
         
-        # Remove watermark on the bottom-left corner of the real image (in original 500x750 coordinate space)
+        # Remove watermark on the bottom-left corner by replacing it with a flipped clean patch from the bottom-right
         img_np = np.array(img)
-        img_np[350:, :150] = 0
+        clean_patch = img_np[350:, 600:]
+        img_np[350:, :150] = np.flip(clean_patch, axis=1)
         img = Image.fromarray(img_np)
         
         # Resize
