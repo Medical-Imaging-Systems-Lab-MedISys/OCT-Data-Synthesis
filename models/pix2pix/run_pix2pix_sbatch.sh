@@ -16,7 +16,16 @@ module load Miniforge3/26.1.1-3
 # Activate your cluster conda environment
 source activate /data/vds/env_pt
 
-# 2. Stage dataset to local NVMe SSD (/tmp) for high-performance I/O
+# 2. Check MLflow remote tracking credentials
+if [ -z "$MLFLOW_TRACKING_USERNAME" ] || [ -z "$MLFLOW_TRACKING_PASSWORD" ]; then
+    echo "ERROR: Remote MLflow tracker credentials are not set in your environment!"
+    echo "Please export your DAGsHub credentials before running this script:"
+    echo "  export MLFLOW_TRACKING_USERNAME=\"Mohan5353\""
+    echo "  export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
+    exit 1
+fi
+
+# 3. Stage dataset to local NVMe SSD (/tmp) for high-performance I/O
 LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_JOB_ID}"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
@@ -26,10 +35,10 @@ cp -r ./NR206 "$LOCAL_SCRATCH/"
 cp models/pix2pix/config_pix2pix.json models/pix2pix/config_pix2pix_backup.json
 sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" models/pix2pix/config_pix2pix.json
 
-# 3. Execute Training
+# 4. Execute Training
 srun python models/pix2pix/train_pix2pix.py --config models/pix2pix/config_pix2pix.json
 
-# 4. Post-Run Cleanup
+# 5. Post-Run Cleanup
 echo "Restoring configuration file and cleaning up SSD scratch..."
 mv models/pix2pix/config_pix2pix_backup.json models/pix2pix/config_pix2pix.json
 rm -rf "$LOCAL_SCRATCH"

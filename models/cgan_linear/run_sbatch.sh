@@ -16,7 +16,16 @@ module load Miniforge3/26.1.1-3
 # Activate your cluster conda environment
 source activate /data/vds/env_pt
 
-# 2. Optional: Stage dataset to local NVMe /tmp for I/O Optimization (highly recommended on this cluster)
+# 2. Check MLflow remote tracking credentials
+if [ -z "$MLFLOW_TRACKING_USERNAME" ] || [ -z "$MLFLOW_TRACKING_PASSWORD" ]; then
+    echo "ERROR: Remote MLflow tracker credentials are not set in your environment!"
+    echo "Please export your DAGsHub credentials before running this script:"
+    echo "  export MLFLOW_TRACKING_USERNAME=\"Mohan5353\""
+    echo "  export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
+    exit 1
+fi
+
+# 3. Optional: Stage dataset to local NVMe /tmp for I/O Optimization (highly recommended on this cluster)
 # To use, uncomment the lines below and ensure your config.json references the staged directories:
 #
 # LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_JOB_ID}"
@@ -27,10 +36,10 @@ source activate /data/vds/env_pt
 # cp models/cgan_linear/config.json models/cgan_linear/config_backup.json
 # sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" models/cgan_linear/config.json
 
-# 3. Execute Training
+# 4. Execute Training
 NUM_GPUS=4
 srun python models/cgan_linear/conditional-GAN-generating-NR206.py --num_gpus $NUM_GPUS
 
-# 4. Optional: Staging Cleanup (Mandatory if staging was enabled)
+# 5. Optional: Staging Cleanup (Mandatory if staging was enabled)
 # mv models/cgan_linear/config_backup.json models/cgan_linear/config.json
 # rm -rf "$LOCAL_SCRATCH"
