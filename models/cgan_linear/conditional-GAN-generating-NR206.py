@@ -378,8 +378,8 @@ def main():
         # Log final pytorch models (unwrapped if DataParallel)
         gen_to_log = generator.module if isinstance(generator, nn.DataParallel) else generator
         disc_to_log = discriminator.module if isinstance(discriminator, nn.DataParallel) else discriminator
-        mlflow.pytorch.log_model(gen_to_log, "generator_model")
-        mlflow.pytorch.log_model(disc_to_log, "discriminator_model")
+        mlflow.pytorch.log_model(gen_to_log, "generator_model", serialization_format="pickle")
+        mlflow.pytorch.log_model(disc_to_log, "discriminator_model", serialization_format="pickle")
         print("Training completed and logged successfully.")
 
 
