@@ -1,0 +1,37 @@
+# MLflow
+mlflow.db
+mlruns/
+
+# Datasets and compressed files
+*.zip
+*.tar.gz
+NR206/
+
+# Python caches and local environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.venv/
+env/
+venv/
+
+# Antigravity and system files
+.agents/
+.gemini/
+
+# Output checkpoints
+test_checkpoints/
+
+# Job outputs
+*.out
+*.err
+
+# Cloned repositories and generated datasets
+pix2pix/
+pytorch-CycleGAN-and-pix2pix/
+synthetic_dataset/
+synthetic_dataset_clean/
+
+

@@ -1,0 +1,2291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCT Scan Intensity Profiler</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-base: #090d16;
+            --bg-surface: #131b2e;
+            --bg-surface-hover: #1e2942;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-color-hover: rgba(255, 255, 255, 0.16);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            --line1-color: #ef4444;
+            --line1-alpha: rgba(239, 68, 68, 0.15);
+            --line1-glow: rgba(239, 68, 68, 0.4);
+            
+            --line2-color: #10b981;
+            --line2-alpha: rgba(16, 185, 129, 0.15);
+            --line2-glow: rgba(16, 185, 129, 0.4);
+            
+            --line3-color: #3b82f6;
+            --line3-alpha: rgba(59, 130, 246, 0.15);
+            --line3-glow: rgba(59, 130, 246, 0.4);
+            
+            --accent-color: #6366f1;
+            --accent-hover: #4f46e5;
+            
+            --sidebar-width: 380px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-base);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #273552;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #384f7a;
+        }
+
+        /* Header Style */
+        header {
+            background: linear-gradient(135deg, #0d1527 0%, #15223f 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+        }
+
+        .header-title-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-color) 0%, #8b5cf6 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+        }
+
+        header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            background: linear-gradient(to right, #f8fafc, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        /* Layout Main Containers */
+        .app-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Sidebar Styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-section {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* Controls elements */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        select, input[type="number"], input[type="text"] {
+            width: 100%;
+            background-color: #0b0f1a;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.6rem 0.8rem;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        select:focus, input[type="number"]:focus, input[type="text"]:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        button.btn {
+            background-color: #1e293b;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button.btn:hover:not(:disabled) {
+            background-color: var(--bg-surface-hover);
+            border-color: var(--border-color-hover);
+        }
+
+        button.btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        button.btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.btn-primary {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        button.btn-primary:hover:not(:disabled) {
+            background-color: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        /* File list styles */
+        .image-picker-container {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 0.75rem;
+        }
+
+        .image-picker-container select {
+            flex: 1;
+        }
+
+        .file-upload-btn-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload-btn-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* Radio Toggle Switch Grid */
+        .toggle-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .toggle-btn {
+            background-color: #0b0f1a;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .toggle-btn:hover {
+            border-color: var(--border-color-hover);
+            color: var(--text-primary);
+        }
+
+        .toggle-btn.active {
+            background-color: rgba(99, 102, 241, 0.1);
+            border-color: var(--accent-color);
+            color: var(--text-primary);
+        }
+
+        /* Line Controls Section */
+        .line-control-card {
+            background-color: #0b0f1a;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .line-control-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .line-control-card.active-line-1 { border-left: 4px solid var(--line1-color); }
+        .line-control-card.active-line-2 { border-left: 4px solid var(--line2-color); }
+        .line-control-card.active-line-3 { border-left: 4px solid var(--line3-color); }
+
+        .line-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .line-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .line-color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .dot-1 { background-color: var(--line1-color); box-shadow: 0 0 8px var(--line1-glow); }
+        .dot-2 { background-color: var(--line2-color); box-shadow: 0 0 8px var(--line2-glow); }
+        .dot-3 { background-color: var(--line3-color); box-shadow: 0 0 8px var(--line3-glow); }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            user-select: none;
+        }
+
+        .checkbox-container input {
+            margin-right: 6px;
+            cursor: pointer;
+        }
+
+        .slider-row {
+            margin-bottom: 0.75rem;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .slider-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #1e293b;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--text-primary);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Line stats display */
+        .line-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed var(--border-color);
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            text-align: center;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            margin-bottom: 2px;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        /* Main Workspace */
+        .workspace-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: #07090e;
+            padding: 1.5rem;
+        }
+
+        .workspace-viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background-color: #090d16;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Alignment styles for canvases */
+        .canvas-layout-wrapper {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 1rem;
+        }
+
+        .canvas-layout-wrapper.orientation-vertical {
+            flex-direction: row;
+        }
+
+        .canvas-layout-wrapper.orientation-horizontal {
+            flex-direction: column;
+        }
+
+        .canvas-container-box {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #0b0f1a;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .canvas-layout-wrapper.orientation-vertical .canvas-container-box {
+            height: 100%;
+            flex: 1;
+            max-width: 50%;
+        }
+
+        .canvas-layout-wrapper.orientation-horizontal .canvas-container-box {
+            width: 100%;
+            flex: 1;
+            max-height: 50%;
+        }
+
+        .canvas-container-box h3 {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            align-self: flex-start;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .canvas-inner {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: calc(100% - 25px); /* Subtract heading height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 4px;
+            cursor: default;
+        }
+
+        /* Drag Overlay Notice */
+        .dropzone-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(99, 102, 241, 0.15);
+            backdrop-filter: blur(4px);
+            border: 2px dashed var(--accent-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 100;
+            border-radius: 12px;
+        }
+
+        .dropzone-overlay.dragover {
+            opacity: 1;
+        }
+
+        .overlay-subtext {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            margin-top: 8px;
+        }
+
+        /* Tooltip Inspector */
+        .inspector-tooltip {
+            position: absolute;
+            background-color: rgba(19, 27, 46, 0.95);
+            border: 1px solid var(--accent-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            font-family: 'JetBrains Mono', monospace;
+            display: none;
+        }
+
+        .tooltip-title {
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 2px;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 2px;
+        }
+        .tooltip-row:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .app-container {
+                flex-direction: column;
+                overflow-y: auto;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .workspace-container {
+                height: 600px;
+            }
+            .canvas-layout-wrapper.orientation-vertical {
+                flex-direction: column;
+            }
+            .canvas-layout-wrapper.orientation-vertical .canvas-container-box {
+                max-width: 100%;
+            }
+        }
+
+        /* SVG icons */
+        .icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title-container">
+            <div class="header-logo">O</div>
+            <div>
+                <h1>OCT Intensity Profile Analyzer</h1>
+                <p>Interactive depth-profiling of Optical Coherence Tomography scans</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-primary" id="btn-synthetic" title="Generate a clean synthetic OCT scan to play with">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                Load Synthetic OCT
+            </button>
+            <button class="btn" id="btn-export" title="Export profile curves to CSV file">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                Export CSV
+            </button>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <div class="sidebar">
+            <!-- Section 1: Image loading -->
+            <div class="sidebar-section">
+                <div class="section-title">Image Source</div>
+                <div class="form-group">
+                    <label for="server-images">Select Image from Server</label>
+                    <div class="image-picker-container">
+                        <select id="server-images">
+                            <option value="">-- No server images found --</option>
+                        </select>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn" id="btn-prev" style="flex: 1;" disabled>Previous</button>
+                        <button class="btn" id="btn-next" style="flex: 1;" disabled>Next</button>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin: 0.75rem 0; color: var(--text-muted); font-size: 0.8rem;">— OR —</div>
+                
+                <div class="form-group">
+                    <div class="file-upload-btn-wrapper">
+                        <button class="btn" style="width: 100%;">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                            Upload Custom Image
+                        </button>
+                        <input type="file" id="local-file-input" accept="image/*" />
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px; text-align: center;">Drag & drop works anywhere on viewport</p>
+                </div>
+            </div>
+
+            <!-- Section 2: Global Profile Settings -->
+            <div class="sidebar-section">
+                <div class="section-title">Global Settings</div>
+                <div class="form-group">
+                    <label>Profile Channel</label>
+                    <div class="toggle-grid" id="channel-toggle-container">
+                        <div class="toggle-btn active" data-channel="luminance">Grayscale</div>
+                        <div class="toggle-btn" data-channel="r">Red</div>
+                        <div class="toggle-btn" data-channel="g">Green</div>
+                        <div class="toggle-btn" data-channel="b">Blue</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Plot Orientation</label>
+                    <div class="toggle-grid" id="orientation-toggle-container">
+                        <div class="toggle-btn active" data-orientation="vertical">Depth Aligned</div>
+                        <div class="toggle-btn" data-orientation="horizontal">Standard</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Hover Inspection Radius (px)</label>
+                    <div class="slider-container">
+                        <input type="range" id="hover-radius" min="0" max="50" step="1" value="5">
+                        <input type="number" id="hover-radius-val" min="0" max="50" step="1" value="5" style="width: 60px; padding: 0.25rem;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Line Configs -->
+            <div class="sidebar-section" style="flex: 1;">
+                <div class="section-title">Profiler Lines</div>
+                
+                <!-- Line 1 Control -->
+                <div class="line-control-card active-line-1" id="line-card-0">
+                    <div class="line-card-header">
+                        <div class="line-title">
+                            <span class="line-color-dot dot-1"></span>
+                            <span>Line 1 (Red)</span>
+                        </div>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="line-enable-0" checked> Active
+                        </label>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header">
+                            <span>Position X (px)</span>
+                            <span class="slider-value" id="line-x-val-txt-0">0</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="line-x-0" min="0" max="100" value="0">
+                            <input type="number" id="line-x-val-0" min="0" max="100" value="0" style="width: 60px; padding: 0.25rem;">
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header">
+                            <span>Averaging Width (px)</span>
+                            <span class="slider-value" id="line-w-val-txt-0">1</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="line-w-0" min="1" max="101" step="2" value="1">
+                            <input type="number" id="line-w-val-0" min="1" max="101" step="2" value="1" style="width: 60px; padding: 0.25rem;">
+                        </div>
+                    </div>
+                    <div class="line-stats" id="line-stats-0">
+                        <div class="stat-item"><span class="stat-label">Min</span><span class="stat-value" id="line-min-0">-</span></div>
+                        <div class="stat-item"><span class="stat-label">Max</span><span class="stat-value" id="line-max-0">-</span></div>
+                        <div class="stat-item"><span class="stat-label">Mean</span><span class="stat-value" id="line-mean-0">-</span></div>
+                    </div>
+                </div>
+
+                <!-- Line 2 Control -->
+                <div class="line-control-card active-line-2" id="line-card-1">
+                    <div class="line-card-header">
+                        <div class="line-title">
+                            <span class="line-color-dot dot-2"></span>
+                            <span>Line 2 (Green)</span>
+                        </div>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="line-enable-1" checked> Active
+                        </label>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header">
+                            <span>Position X (px)</span>
+                            <span class="slider-value" id="line-x-val-txt-1">0</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="line-x-1" min="0" max="100" value="0">
+                            <input type="number" id="line-x-val-1" min="0" max="100" value="0" style="width: 60px; padding: 0.25rem;">
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header">
+                            <span>Averaging Width (px)</span>
+                            <span class="slider-value" id="line-w-val-txt-1">1</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="line-w-1" min="1" max="101" step="2" value="1">
+                            <input type="number" id="line-w-val-1" min="1" max="101" step="2" value="1" style="width: 60px; padding: 0.25rem;">
+                        </div>
+                    </div>
+                    <div class="line-stats" id="line-stats-1">
+                        <div class="stat-item"><span class="stat-label">Min</span><span class="stat-value" id="line-min-1">-</span></div>
+                        <div class="stat-item"><span class="stat-label">Max</span><span class="stat-value" id="line-max-1">-</span></div>
+                        <div class="stat-item"><span class="stat-label">Mean</span><span class="stat-value" id="line-mean-1">-</span></div>
+                    </div>
+                </div>
+
+                <!-- Line 3 Control -->
+                <div class="line-control-card active-line-3" id="line-card-2">
+                    <div class="line-card-header">
+                        <div class="line-title">
+                            <span class="line-color-dot dot-3"></span>
+                            <span>Line 3 (Blue)</span>
+                        </div>
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="line-enable-2" checked> Active
+                        </label>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header">
+                            <span>Position X (px)</span>
+                            <span class="slider-value" id="line-x-val-txt-2">0</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="line-x-2" min="0" max="100" value="0">
+                            <input type="number" id="line-x-val-2" min="0" max="100" value="0" style="width: 60px; padding: 0.25rem;">
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <div class="slider-header">
+                            <span>Averaging Width (px)</span>
+                            <span class="slider-value" id="line-w-val-txt-2">1</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="line-w-2" min="1" max="101" step="2" value="1">
+                            <input type="number" id="line-w-val-2" min="1" max="101" step="2" value="1" style="width: 60px; padding: 0.25rem;">
+                        </div>
+                    </div>
+                    <div class="line-stats" id="line-stats-2">
+                        <div class="stat-item"><span class="stat-label">Min</span><span class="stat-value" id="line-min-2">-</span></div>
+                        <div class="stat-item"><span class="stat-label">Max</span><span class="stat-value" id="line-max-2">-</span></div>
+                        <div class="stat-item"><span class="stat-label">Mean</span><span class="stat-value" id="line-mean-2">-</span></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Main Display Area -->
+        <div class="workspace-container" id="workspace-viewport">
+            <div class="workspace-viewport">
+                <!-- Drag and drop zone overlay -->
+                <div class="dropzone-overlay" id="drop-overlay">
+                    <span>Drop Image File Here</span>
+                    <span class="overlay-subtext">Supports PNG, JPG, JPEG, TIFF, BMP</span>
+                </div>
+                
+                <!-- Inspector Tooltip -->
+                <div class="inspector-tooltip" id="inspector">
+                    <div class="tooltip-title" id="tooltip-title">Depth: 100px</div>
+                    <div class="tooltip-row" style="color: #ffffff; font-weight: 500; display: none;"><span>Position:</span><span id="hover-pos">X: -, Y: -</span></div>
+                    <div class="tooltip-row" style="color: #a5b4fc; font-weight: 500; display: none;"><span id="hover-intensity-lbl">Intensity:</span><span id="hover-intensity-val">-</span></div>
+                    <div class="tooltip-divider" id="hover-divider-1" style="border-top: 1px solid var(--border-color); margin: 6px 0; display: none;"></div>
+                    <div class="tooltip-row" style="color: var(--line1-color)"><span id="lbl-l1">Line 1:</span><span id="val-l1">128</span></div>
+                    <div class="tooltip-row" style="color: var(--line2-color)"><span id="lbl-l2">Line 2:</span><span id="val-l2">80</span></div>
+                    <div class="tooltip-row" style="color: var(--line3-color)"><span id="lbl-l3">Line 3:</span><span id="val-l3">190</span></div>
+                </div>
+
+                <div class="canvas-layout-wrapper orientation-vertical" id="layout-wrapper">
+                    <!-- Image Card -->
+                    <div class="canvas-container-box" id="img-box">
+                        <h3>
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5.04-6.71l-2.75 3.54-1.96-2.36L6.5 17h11l-3.54-4.71z"/></svg>
+                            OCT Image View
+                        </h3>
+                        <div class="canvas-inner" id="canvas-img-inner">
+                            <canvas id="canvas-image"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Graph Card -->
+                    <div class="canvas-container-box" id="graph-box">
+                        <h3>
+                            <svg class="icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+                            Intensity Depth Profile
+                        </h3>
+                        <div class="canvas-inner" id="canvas-graph-inner">
+                            <canvas id="canvas-graph"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Core State
+        let img = null;
+        let imgData = null; // ImageData object of the original image
+        let serverImages = [];
+        let currentImageIndex = -1;
+        let channel = 'luminance'; // 'luminance', 'r', 'g', 'b'
+        let orientation = 'vertical'; // 'vertical', 'horizontal'
+        
+        // Canvas Elements
+        const canvasImg = document.getElementById('canvas-image');
+        const canvasGraph = document.getElementById('canvas-graph');
+        const ctxImg = canvasImg.getContext('2d');
+        const ctxGraph = canvasGraph.getContext('2d');
+        
+        // Lines definition (relative to original image pixel coordinates)
+        let lines = [
+            { id: 0, x: 120, width: 1, enabled: true, color: 'rgb(239, 68, 68)', colorAlpha: 'rgba(239, 68, 68, 0.12)', name: 'Line 1', stats: { min:0, max:0, mean:0 }, profile: null },
+            { id: 1, x: 256, width: 1, enabled: true, color: 'rgb(16, 185, 129)', colorAlpha: 'rgba(16, 185, 129, 0.12)', name: 'Line 2', stats: { min:0, max:0, mean:0 }, profile: null },
+            { id: 2, x: 390, width: 1, enabled: true, color: 'rgb(59, 130, 246)', colorAlpha: 'rgba(59, 130, 246, 0.12)', name: 'Line 3', stats: { min:0, max:0, mean:0 }, profile: null }
+        ];
+        
+        // Interaction State
+        let draggingLineId = null;
+        let hoverY = null; // Original image Y depth hovered
+        let hoverX = null; // Original image X position hovered
+        let hoverRadius = 5; // Hover inspection radius (in pixels)
+        let mouseOnImageCanvas = false;
+        let mouseOnGraphCanvas = false;
+        
+        // Offscreen canvas for getting image pixel data
+        const offscreenCanvas = document.createElement('canvas');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+
+        // Document Setup
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchServerImages();
+            setupEventListeners();
+            loadSyntheticImage(); // Load synthetic image initially
+        });
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            if (img) {
+                updateCanvasSizes();
+                drawAll();
+            }
+        });
+
+        function setupEventListeners() {
+            // Dropdowns and inputs
+            document.getElementById('server-images').addEventListener('change', (e) => {
+                const val = e.target.value;
+                if (val) {
+                    loadImageFromServer(val);
+                }
+            });
+
+            document.getElementById('btn-prev').addEventListener('click', () => {
+                if (currentImageIndex > 0) {
+                    currentImageIndex--;
+                    loadIndexImage();
+                }
+            });
+
+            document.getElementById('btn-next').addEventListener('click', () => {
+                if (currentImageIndex < serverImages.length - 1) {
+                    currentImageIndex++;
+                    loadIndexImage();
+                }
+            });
+
+            // Local File Upload
+            document.getElementById('local-file-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    loadImageFromFile(file);
+                }
+            });
+
+            // Synthetic OCT button
+            document.getElementById('btn-synthetic').addEventListener('click', () => {
+                loadSyntheticImage();
+            });
+
+            // Export to CSV
+            document.getElementById('btn-export').addEventListener('click', exportCSV);
+
+            // Channel toggles
+            const channelBtns = document.querySelectorAll('#channel-toggle-container .toggle-btn');
+            channelBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    channelBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    channel = btn.dataset.channel;
+                    calculateProfiles();
+                    drawAll();
+                    updateStatsUI();
+                });
+            });
+
+            // Orientation toggles
+            const orientBtns = document.querySelectorAll('#orientation-toggle-container .toggle-btn');
+            orientBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    orientBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    orientation = btn.dataset.orientation;
+                    
+                    const wrapper = document.getElementById('layout-wrapper');
+                    wrapper.className = `canvas-layout-wrapper orientation-${orientation}`;
+                    
+                    updateCanvasSizes();
+                    drawAll();
+                });
+            });
+
+            // Hover Radius controls
+            const radiusSlider = document.getElementById('hover-radius');
+            const radiusInput = document.getElementById('hover-radius-val');
+            
+            const updateRadius = (newVal) => {
+                let r = parseInt(newVal);
+                if (isNaN(r) || r < 0) r = 0;
+                if (r > 100) r = 100;
+                hoverRadius = r;
+                radiusSlider.value = r;
+                radiusInput.value = r;
+                drawAll();
+            };
+            
+            radiusSlider.addEventListener('input', (e) => updateRadius(e.target.value));
+            radiusInput.addEventListener('change', (e) => updateRadius(e.target.value));
+
+            // Set up Line controls dynamically (listeners for sliding/inputting)
+            lines.forEach(line => {
+                const id = line.id;
+                const enableChk = document.getElementById(`line-enable-${id}`);
+                const posSlider = document.getElementById(`line-x-${id}`);
+                const posInput = document.getElementById(`line-x-val-${id}`);
+                const widthSlider = document.getElementById(`line-w-${id}`);
+                const widthInput = document.getElementById(`line-w-val-${id}`);
+
+                enableChk.addEventListener('change', (e) => {
+                    line.enabled = e.target.checked;
+                    const card = document.getElementById(`line-card-${id}`);
+                    if (line.enabled) {
+                        card.style.opacity = '1';
+                    } else {
+                        card.style.opacity = '0.5';
+                    }
+                    calculateProfiles();
+                    drawAll();
+                    updateStatsUI();
+                });
+
+                // Position Sync
+                const updatePos = (newVal) => {
+                    newVal = Math.max(0, Math.min(img ? img.width - 1 : 100, parseInt(newVal) || 0));
+                    line.x = newVal;
+                    posSlider.value = newVal;
+                    posInput.value = newVal;
+                    document.getElementById(`line-x-val-txt-${id}`).innerText = newVal;
+                    
+                    calculateProfiles();
+                    drawAll();
+                    updateStatsUI();
+                };
+
+                posSlider.addEventListener('input', (e) => updatePos(e.target.value));
+                posInput.addEventListener('change', (e) => updatePos(e.target.value));
+
+                // Width Sync
+                const updateWidth = (newVal) => {
+                    // Make sure width is odd for symmetrical averaging
+                    let w = parseInt(newVal) || 1;
+                    if (w % 2 === 0) w = Math.max(1, w - 1);
+                    w = Math.max(1, Math.min(151, w));
+                    
+                    line.width = w;
+                    widthSlider.value = w;
+                    widthInput.value = w;
+                    document.getElementById(`line-w-val-txt-${id}`).innerText = w;
+                    
+                    calculateProfiles();
+                    drawAll();
+                    updateStatsUI();
+                };
+
+                widthSlider.addEventListener('input', (e) => updateWidth(e.target.value));
+                widthInput.addEventListener('change', (e) => updateWidth(e.target.value));
+            });
+
+            // Drag and Drop files
+            const workspace = document.getElementById('workspace-viewport');
+            const dropOverlay = document.getElementById('drop-overlay');
+
+            workspace.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                dropOverlay.classList.add('dragover');
+            });
+
+            workspace.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            workspace.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                // Only remove if we leave the actual zone
+                if (e.relatedTarget === null || !workspace.contains(e.relatedTarget)) {
+                    dropOverlay.classList.remove('dragover');
+                }
+            });
+
+            workspace.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropOverlay.classList.remove('dragover');
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    loadImageFromFile(file);
+                }
+            });
+
+            // Image canvas interaction
+            canvasImg.addEventListener('mousedown', onImgMouseDown);
+            canvasImg.addEventListener('mousemove', onImgMouseMove);
+            canvasImg.addEventListener('mouseleave', onImgMouseLeave);
+
+            // Graph canvas interaction
+            canvasGraph.addEventListener('mousemove', onGraphMouseMove);
+            canvasGraph.addEventListener('mouseleave', onGraphMouseLeave);
+
+            // Global mouse up
+            window.addEventListener('mouseup', () => {
+                if (draggingLineId !== null) {
+                    draggingLineId = null;
+                    canvasImg.style.cursor = 'default';
+                }
+            });
+        }
+
+        // Fetch recursive file list from Python API
+        function fetchServerImages() {
+            fetch('/api/images')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.images && data.images.length > 0) {
+                        serverImages = data.images;
+                        populateServerImagesList();
+                    }
+                })
+                .catch(err => {
+                    console.log('Error fetching server images. Working in local-only mode:', err);
+                });
+        }
+
+        function populateServerImagesList() {
+            const select = document.getElementById('server-images');
+            select.innerHTML = '<option value="">-- Choose file --</option>';
+            
+            serverImages.forEach(path => {
+                const opt = document.createElement('option');
+                opt.value = path;
+                // Just display the filename for clean view, but path as value
+                const filename = path.split('/').pop();
+                const folder = path.split('/').slice(0, -1).join('/');
+                opt.text = folder ? `${filename} (${folder})` : filename;
+                select.appendChild(opt);
+            });
+
+            document.getElementById('btn-prev').disabled = false;
+            document.getElementById('btn-next').disabled = false;
+        }
+
+        function loadIndexImage() {
+            if (currentImageIndex >= 0 && currentImageIndex < serverImages.length) {
+                const path = serverImages[currentImageIndex];
+                document.getElementById('server-images').value = path;
+                loadImageFromServer(path);
+            }
+            
+            document.getElementById('btn-prev').disabled = (currentImageIndex <= 0);
+            document.getElementById('btn-next').disabled = (currentImageIndex >= serverImages.length - 1);
+        }
+
+        function loadImageFromServer(relPath) {
+            currentImageIndex = serverImages.indexOf(relPath);
+            document.getElementById('btn-prev').disabled = (currentImageIndex <= 0);
+            document.getElementById('btn-next').disabled = (currentImageIndex >= serverImages.length - 1 || currentImageIndex === -1);
+
+            const url = `/api/image/${encodeURIComponent(relPath)}`;
+            const tempImg = new Image();
+            tempImg.onload = function() {
+                img = tempImg;
+                initImageState();
+            };
+            tempImg.onerror = function() {
+                alert(`Failed to load server image: ${relPath}`);
+            };
+            tempImg.src = url;
+        }
+
+        function loadImageFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const tempImg = new Image();
+                tempImg.onload = function() {
+                    img = tempImg;
+                    // Reset server dropdown selection
+                    document.getElementById('server-images').value = '';
+                    currentImageIndex = -1;
+                    document.getElementById('btn-prev').disabled = true;
+                    document.getElementById('btn-next').disabled = true;
+                    
+                    initImageState();
+                };
+                tempImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Generate synthetic OCT scans dynamically
+        function loadSyntheticImage() {
+            const width = 750;
+            const height = 500;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            // Generate randomized parameters for this specific image run (image-to-image randomness)
+            const verticalOffset = (Math.random() - 0.5) * 26;  // Shift up/down by up to 13px
+            const slopeScale = 0.7 + Math.random() * 0.6;        // Vary the linear slope tilt
+            const foveaX = 345 + Math.random() * 60;             // Center of fovea
+            const dipScale = 0.75 + Math.random() * 0.5;         // Vary fovea depth scale
+            const dipWidthScale = 0.8 + Math.random() * 0.45;    // Vary fovea width scale
+            const thicknessScale = 0.95 + Math.random() * 0.15;   // Scale thicknesses slightly
+
+            // Baseline coefficients for the 8 layer curves (a, b, c, d, w, meanInt)
+            // Enhanced contrast between adjacent layers so all bands (even the thinnest ones) stand out clearly.
+            const layers = [
+                { name: 'Red',         a: 0.000163,  b: -0.1227, c: 137.8, d: 34.7, w: 43.5,  meanInt: 200.0 }, // Very Bright
+                { name: 'Olive',       a: 0.000130,  b: -0.1091, c: 153.8, d: 19.2, w: 41.8,  meanInt: 130.0 }, // Medium-Dark
+                { name: 'Yellow',      a: 0.000070,  b: -0.0702, c: 166.3, d: 2.1,  w: 10.9,  meanInt: 180.0 }, // Bright
+                { name: 'DarkGreen',   a: 0.000042,  b: -0.0491, c: 171.6, d: -7.3, w: 40.5,  meanInt: 110.0 }, // Dark
+                { name: 'BrightGreen', a: -0.000000, b: -0.0200, c: 179.8, d: -7.5, w: 34.7,  meanInt: 60.0  }, // Very Dark
+                { name: 'Cyan',        a: -0.000033, b: 0.0014,  c: 189.1, d: -3.4, w: 26.6,  meanInt: 140.0 }, // Medium
+                { name: 'Blue',        a: -0.000039, b: 0.0054,  c: 194.0, d: -3.2, w: 29.4,  meanInt: 245.0 }, // Extremely Bright (Thinnest layer)
+                { name: 'Magenta',     a: -0.000042, b: 0.0070,  c: 201.4, d: -1.1, w: 18.2,  meanInt: 80.0  }  // Dark
+            ];
+
+            const globalGamma = 0.7 + Math.random() * 0.6; // Global scanner baseline (0.7 to 1.3)
+            const layerGammas = layers.map(() => globalGamma * (0.8 + Math.random() * 0.4));
+            const bgGamma = globalGamma * (0.8 + Math.random() * 0.4);
+
+            console.log(`Generated synthetic OCT scan with fovea X: ${foveaX.toFixed(1)}, Global Gamma: ${globalGamma.toFixed(2)}`);
+
+            // Helper to apply gamma correction
+            function applyGamma(val, g) {
+                return 255 * Math.pow(val / 255, g);
+            }
+
+            // Calculate sequential layer boundaries for a given X coordinate based on thickness profiles
+            function getLayerBoundaries(x) {
+                // Top boundary Y_top(x)
+                // Using Red (ILM) layer's fitted coefficients for baseline slope/dome shape
+                const red = layers[0];
+                const c = red.c - 7.5 + verticalOffset; // Shift slightly up to start at top of Red
+                const b = red.b * slopeScale;
+                const d = red.d * dipScale;
+                const w = red.w * dipWidthScale;
+                const dip = d * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(w, 2)));
+                
+                const yTop = red.a * Math.pow(x, 2) + b * x + c + dip;
+
+                // Modeled thickness profiles for each layer at coordinate x
+                // T1: Red / ILM (thickest on left, thinnest in central fovea)
+                const t1 = (3 + 12 * Math.exp(-x / 100) - 1.5 * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(40, 2)))) * thicknessScale;
+                
+                // T2: Olive / NFL (Bell curve with deep foveal collapse/extinction)
+                const t2_base = 16 + 14 * Math.exp(-Math.pow(x - 220, 2) / (2 * Math.pow(150, 2))) + 10 * Math.exp(-Math.pow(x - 500, 2) / (2 * Math.pow(150, 2)));
+                const t2_dip = 28 * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(30, 2)));
+                const t2 = Math.max(1.0, t2_base - t2_dip) * thicknessScale;
+                
+                // T3: Yellow
+                const t3 = (7.0 - 5.0 * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(35, 2)))) * thicknessScale;
+                
+                // T4: DarkGreen
+                const t4 = (7.5 + 4.5 * Math.exp(-Math.pow(x - 480, 2) / (2 * Math.pow(60, 2))) - 5.5 * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(30, 2)))) * thicknessScale;
+                
+                // T5: BrightGreen (Photoreceptor bulge / concentration in foveal center)
+                const t5 = (11.0 + 17.0 * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(70, 2)))) * thicknessScale;
+                
+                // T6: Cyan
+                const t6 = 8.0 * thicknessScale;
+                
+                // T7: Blue (Very thin layer, stays flat)
+                const t7 = 3.0 * thicknessScale;
+                
+                // T8: Magenta
+                const t8 = (12.0 + 2.0 * Math.exp(-Math.pow(x - foveaX, 2) / (2 * Math.pow(150, 2)))) * thicknessScale;
+
+                // Stack boundaries sequentially to mathematically prevent crossings
+                const b0 = yTop;
+                const b1 = b0 + Math.max(1.0, t1);
+                const b2 = b1 + Math.max(1.0, t2);
+                const b3 = b2 + Math.max(1.0, t3);
+                const b4 = b3 + Math.max(1.0, t4);
+                const b5 = b4 + Math.max(1.0, t5);
+                const b6 = b5 + Math.max(1.0, t6);
+                const b7 = b6 + Math.max(1.0, t7);
+                const b8 = b7 + Math.max(1.0, t8);
+
+                return [b0, b1, b2, b3, b4, b5, b6, b7, b8];
+            }
+
+            const rawImgData = ctx.createImageData(width, height);
+            const data = rawImgData.data;
+
+            for (let x = 0; x < width; x++) {
+                const bounds = getLayerBoundaries(x);
+                const b0 = bounds[0];
+                const b1 = bounds[1];
+                const b2 = bounds[2];
+                const b3 = bounds[3];
+                const b4 = bounds[4];
+                const b5 = bounds[5];
+                const b6 = bounds[6];
+                const b7 = bounds[7];
+                const b8 = bounds[8];
+
+                // Simple horizontal wave to make the bands look slightly textured/organic
+                const layerTexture = Math.sin(x * 0.05) * 3 + Math.cos(x * 0.02) * 2;
+
+                for (let y = 0; y < height; y++) {
+                    let intensity = 15;
+                    let currentGamma = bgGamma;
+
+                    if (y < b0) {
+                        // Vitreous humor (top background) - Restore clean dark black background
+                        intensity = 10;
+                        currentGamma = bgGamma;
+                    } 
+                    else if (y >= b0 && y < b1) {
+                        // Layer 1 - Red / ILM
+                        intensity = layers[0].meanInt + layerTexture;
+                        currentGamma = layerGammas[0];
+                    } 
+                    else if (y >= b1 && y < b2) {
+                        // Layer 2 - Olive / NFL
+                        intensity = layers[1].meanInt + layerTexture;
+                        currentGamma = layerGammas[1];
+                    } 
+                    else if (y >= b2 && y < b3) {
+                        // Layer 3 - Yellow
+                        intensity = layers[2].meanInt + layerTexture;
+                        currentGamma = layerGammas[2];
+                    } 
+                    else if (y >= b3 && y < b4) {
+                        // Layer 4 - DarkGreen
+                        intensity = layers[3].meanInt + layerTexture;
+                        currentGamma = layerGammas[3];
+                    } 
+                    else if (y >= b4 && y < b5) {
+                        // Layer 5 - BrightGreen / ONL (very dark)
+                        intensity = layers[4].meanInt + layerTexture;
+                        currentGamma = layerGammas[4];
+                    } 
+                    else if (y >= b5 && y < b6) {
+                        // Layer 6 - Cyan
+                        intensity = layers[5].meanInt + layerTexture;
+                        currentGamma = layerGammas[5];
+                    } 
+                    else if (y >= b6 && y < b7) {
+                        // Layer 7 - Blue / IS-OS (very bright)
+                        intensity = layers[6].meanInt + layerTexture;
+                        currentGamma = layerGammas[6];
+                    } 
+                    else if (y >= b7 && y < b8) {
+                        // Layer 8 - Magenta / RPE-Choroid (very bright)
+                        intensity = layers[7].meanInt + layerTexture;
+                        currentGamma = layerGammas[7];
+                    } 
+                    else {
+                        // Sclera / deep background - Decays quickly back to dark black background
+                        const dist = y - b8;
+                        intensity = 10 + 20 * Math.exp(-dist / 25);
+                        currentGamma = bgGamma;
+                    }
+
+                    // Apply layer-specific gamma correction
+                    let correctedIntensity = applyGamma(intensity, currentGamma);
+
+                    // Add characteristic OCT speckle noise (multiplicative) + background noise
+                    const speckleNoise = 0.4 + Math.random() * 1.2;
+                    const additiveNoise = (Math.random() - 0.5) * 16;
+                    
+                    let finalVal = correctedIntensity * speckleNoise + additiveNoise;
+                    finalVal = Math.max(0, Math.min(255, finalVal));
+
+                    const idx = (y * width + x) * 4;
+                    data[idx] = finalVal;     // R
+                    data[idx + 1] = finalVal; // G
+                    data[idx + 2] = finalVal; // B
+                    data[idx + 3] = 255;      // A
+                }
+            }
+
+            ctx.putImageData(rawImgData, 0, 0);
+
+            // Convert canvas to Image
+            const tempImg = new Image();
+            tempImg.onload = function() {
+                img = tempImg;
+                initImageState();
+            };
+            tempImg.src = canvas.toDataURL();
+        }
+
+        // Initialize state variables when a new image is loaded
+        function initImageState() {
+            // Get raw pixel data in offscreen canvas
+            offscreenCanvas.width = img.width;
+            offscreenCanvas.height = img.height;
+            offscreenCtx.drawImage(img, 0, 0);
+            imgData = offscreenCtx.getImageData(0, 0, img.width, img.height);
+            
+            // Adjust slider maximum positions to match image size
+            lines.forEach((line, index) => {
+                const maxVal = img.width - 1;
+                
+                // Adjust sliders max
+                document.getElementById(`line-x-${index}`).max = maxVal;
+                document.getElementById(`line-x-val-${index}`).max = maxVal;
+                
+                // Distribute lines evenly across width initially
+                const initialPositions = [
+                    Math.round(img.width * 0.25),
+                    Math.round(img.width * 0.5),
+                    Math.round(img.width * 0.75)
+                ];
+                
+                line.x = initialPositions[index];
+                
+                // Sync sliders/inputs
+                document.getElementById(`line-x-${index}`).value = line.x;
+                document.getElementById(`line-x-val-${index}`).value = line.x;
+                document.getElementById(`line-x-val-txt-${index}`).innerText = line.x;
+            });
+
+            updateCanvasSizes();
+            calculateProfiles();
+            drawAll();
+            updateStatsUI();
+        }
+
+        // Resize the canvas structures based on viewport bounding dimensions
+        function updateCanvasSizes() {
+            if (!img) return;
+
+            const imgInner = document.getElementById('canvas-img-inner');
+            const graphInner = document.getElementById('canvas-graph-inner');
+            
+            const containerW = imgInner.clientWidth;
+            const containerH = imgInner.clientHeight || 500;
+            
+            const imgW = img.width;
+            const imgH = img.height;
+
+            if (orientation === 'vertical') {
+                // Vertical aligned: Image and Graph are side-by-side
+                // 1. Fit image canvas keeping aspect ratio inside its box
+                const scale = Math.min(containerW / imgW, containerH / imgH);
+                
+                // Determine precise display width and height
+                const dispW = Math.max(100, imgW * scale);
+                const dispH = Math.max(100, imgH * scale);
+                
+                canvasImg.width = dispW;
+                canvasImg.height = dispH;
+                
+                // 2. Align Graph canvas dimensions
+                // In vertical mode, the graph canvas width fills the graph container,
+                // and the graph height matches the image display height EXACTLY to align depth lines
+                canvasGraph.width = graphInner.clientWidth;
+                canvasGraph.height = dispH;
+                
+            } else {
+                // Horizontal standard plot orientation (stacked layout)
+                // 1. Size Image canvas to fit its box
+                const scale = Math.min(containerW / imgW, containerH / imgH);
+                const dispW = Math.max(100, imgW * scale);
+                const dispH = Math.max(100, imgH * scale);
+                
+                canvasImg.width = dispW;
+                canvasImg.height = dispH;
+                
+                // 2. Size Graph canvas to fill its box
+                canvasGraph.width = graphInner.clientWidth;
+                canvasGraph.height = graphInner.clientHeight || 250;
+            }
+        }
+
+        // Computes pixel average profiles in JavaScript
+        function calculateProfiles() {
+            if (!imgData) return;
+            const w = imgData.width;
+            const h = imgData.height;
+            const data = imgData.data;
+
+            lines.forEach(line => {
+                if (!line.enabled) {
+                    line.profile = null;
+                    line.stats = { min: 0, max: 0, mean: 0 };
+                    return;
+                }
+
+                let profile = new Float32Array(h);
+                let min = 255;
+                let max = 0;
+                let sum = 0;
+
+                // Loop through rows (depth layers)
+                for (let y = 0; y < h; y++) {
+                    let rowSum = 0;
+                    let count = 0;
+                    
+                    const halfW = Math.floor(line.width / 2);
+                    const startX = Math.max(0, line.x - halfW);
+                    const endX = Math.min(w - 1, line.x + halfW);
+
+                    // Average columns over the line width W
+                    for (let x = startX; x <= endX; x++) {
+                        const idx = (y * w + x) * 4;
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+                        
+                        let intensity = 0;
+                        if (channel === 'luminance') {
+                            intensity = 0.299 * r + 0.587 * g + 0.114 * b;
+                        } else if (channel === 'r') {
+                            intensity = r;
+                        } else if (channel === 'g') {
+                            intensity = g;
+                        } else if (channel === 'b') {
+                            intensity = b;
+                        }
+                        
+                        rowSum += intensity;
+                        count++;
+                    }
+
+                    const avg = count > 0 ? rowSum / count : 0;
+                    profile[y] = avg;
+                    
+                    if (avg < min) min = avg;
+                    if (avg > max) max = avg;
+                    sum += avg;
+                }
+
+                line.profile = profile;
+                line.stats = {
+                    min: Math.round(min),
+                    max: Math.round(max),
+                    mean: Math.round(sum / h)
+                };
+            });
+        }
+
+        // Rendering pipelines
+        function drawAll() {
+            drawImageCanvas();
+            drawGraphCanvas();
+        }
+
+        // Draw image scan + line overlays + shaded averaging widths
+        function drawImageCanvas() {
+            if (!img) return;
+
+            // Clear Canvas
+            ctxImg.clearRect(0, 0, canvasImg.width, canvasImg.height);
+            
+            // Draw original scaled image
+            ctxImg.drawImage(img, 0, 0, canvasImg.width, canvasImg.height);
+
+            const { scale, offsetX, offsetY } = getImageMappingParams();
+
+            // Draw line widths (shaded bands) and centerlines
+            lines.forEach(line => {
+                if (!line.enabled) return;
+
+                const lx = offsetX + line.x * scale;
+                const lw = line.width * scale;
+
+                // 1. Draw Averaging Shaded Area (Width overlay)
+                if (line.width > 1) {
+                    ctxImg.fillStyle = line.colorAlpha;
+                    ctxImg.fillRect(lx - lw / 2, offsetY, lw, img.height * scale);
+                    
+                    // Draw outer boundaries of averaging band
+                    ctxImg.strokeStyle = line.color;
+                    ctxImg.lineWidth = 0.5;
+                    ctxImg.beginPath();
+                    ctxImg.moveTo(lx - lw / 2, offsetY);
+                    ctxImg.lineTo(lx - lw / 2, offsetY + img.height * scale);
+                    ctxImg.moveTo(lx + lw / 2, offsetY);
+                    ctxImg.lineTo(lx + lw / 2, offsetY + img.height * scale);
+                    ctxImg.stroke();
+                }
+
+                // 2. Draw Centerline
+                ctxImg.strokeStyle = line.color;
+                ctxImg.lineWidth = 2;
+                ctxImg.beginPath();
+                ctxImg.moveTo(lx, offsetY);
+                ctxImg.lineTo(lx, offsetY + img.height * scale);
+                ctxImg.stroke();
+
+                // 3. Draw Handle circles at top/bottom for grip feedback
+                ctxImg.fillStyle = line.color;
+                ctxImg.beginPath();
+                ctxImg.arc(lx, offsetY + 6, 6, 0, Math.PI * 2);
+                ctxImg.arc(lx, offsetY + img.height * scale - 6, 6, 0, Math.PI * 2);
+                ctxImg.fill();
+                
+                // Add labels on handle
+                ctxImg.fillStyle = '#ffffff';
+                ctxImg.font = 'bold 8px sans-serif';
+                ctxImg.textAlign = 'center';
+                ctxImg.textBaseline = 'middle';
+                ctxImg.fillText(line.id + 1, lx, offsetY + 6);
+            });
+
+            // Draw inspection cursor overlay (horizontal line at depth y + circle for inspection radius)
+            if (mouseOnImageCanvas && hoverY !== null && hoverY >= 0 && hoverY < img.height && hoverX !== null && hoverX >= 0 && hoverX < img.width) {
+                const lx = offsetX + hoverX * scale;
+                const ly = offsetY + hoverY * scale;
+                
+                // Horizontal line
+                ctxImg.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctxImg.lineWidth = 1;
+                ctxImg.setLineDash([5, 5]);
+                ctxImg.beginPath();
+                ctxImg.moveTo(offsetX, ly);
+                ctxImg.lineTo(offsetX + img.width * scale, ly);
+                ctxImg.stroke();
+                
+                // Draw circle indicating inspection radius
+                ctxImg.setLineDash([]);
+                if (hoverRadius > 0) {
+                    ctxImg.strokeStyle = 'rgba(99, 102, 241, 0.85)'; // purple accent-color
+                    ctxImg.fillStyle = 'rgba(99, 102, 241, 0.15)';
+                    ctxImg.lineWidth = 1.5;
+                    ctxImg.beginPath();
+                    ctxImg.arc(lx, ly, hoverRadius * scale, 0, Math.PI * 2);
+                    ctxImg.fill();
+                    ctxImg.stroke();
+                } else {
+                    // Just a small crosshair / dot at the center
+                    ctxImg.fillStyle = '#6366f1';
+                    ctxImg.beginPath();
+                    ctxImg.arc(lx, ly, 3, 0, Math.PI * 2);
+                    ctxImg.fill();
+                }
+            }
+        }
+
+        // Draw 2D custom graph plotting curves, axes, ticks, transparent underlays
+        function drawGraphCanvas() {
+            ctxGraph.clearRect(0, 0, canvasGraph.width, canvasGraph.height);
+
+            if (!img) return;
+
+            const w = canvasGraph.width;
+            const h = canvasGraph.height;
+            
+            // Layout Paddings
+            const padLeft = 45;
+            const padRight = 20;
+            const padTop = 15;
+            const padBottom = 30;
+
+            const plotW = w - padLeft - padRight;
+            const plotH = h - padTop - padBottom;
+
+            // Clear Background
+            ctxGraph.fillStyle = '#0b0f1a';
+            ctxGraph.fillRect(0, 0, w, h);
+
+            if (orientation === 'vertical') {
+                // VERTICAL PLOT MODE (Depth-aligned)
+                // Grid bounds are aligned to matching image height coordinate offsets
+                const { scale, offsetX, offsetY } = getImageMappingParams();
+                const startY = offsetY;
+                const plotHeight = img.height * scale;
+
+                // Set draw boundaries matching exact image offset height
+                const y0 = startY;
+                const y1 = startY + plotHeight;
+
+                // Draw Plot Grid Lines & Ticks (Intensity X: 0 to 255)
+                ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctxGraph.lineWidth = 1;
+                ctxGraph.fillStyle = varColor('--text-muted');
+                ctxGraph.font = '10px "JetBrains Mono", monospace';
+                ctxGraph.textAlign = 'center';
+                ctxGraph.textBaseline = 'top';
+
+                const tickIntervals = [0, 50, 100, 150, 200, 255];
+                tickIntervals.forEach(val => {
+                    const gx = padLeft + (val / 255) * plotW;
+                    
+                    // Draw grid column line
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(gx, y0);
+                    ctxGraph.lineTo(gx, y1);
+                    ctxGraph.stroke();
+
+                    // Ticks at bottom
+                    ctxGraph.fillText(val, gx, y1 + 5);
+                });
+                
+                // Label for bottom axis
+                ctxGraph.fillText("Intensity Value", padLeft + plotW/2, y1 + 18);
+
+                // Draw Depth Y grid rows (e.g., every 100px or percentage based)
+                ctxGraph.textAlign = 'right';
+                ctxGraph.textBaseline = 'middle';
+                
+                let stepY = 100;
+                if (img.height < 200) stepY = 50;
+                else if (img.height > 1000) stepY = 200;
+
+                for (let depth = 0; depth < img.height; depth += stepY) {
+                    const gy = y0 + depth * scale;
+                    
+                    // Horizontal grid line
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(padLeft, gy);
+                    ctxGraph.lineTo(padLeft + plotW, gy);
+                    ctxGraph.stroke();
+
+                    // Ticks at left axis
+                    ctxGraph.fillText(depth, padLeft - 6, gy);
+                }
+                
+                // Also draw boundary border for grid
+                ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctxGraph.strokeRect(padLeft, y0, plotW, plotHeight);
+
+                // Draw Plot Curves for each active line
+                lines.forEach(line => {
+                    if (!line.enabled || !line.profile) return;
+
+                    ctxGraph.beginPath();
+                    for (let y = 0; y < img.height; y++) {
+                        const val = line.profile[y];
+                        const gx = padLeft + (val / 255) * plotW;
+                        const gy = y0 + y * scale;
+
+                        if (y === 0) {
+                            ctxGraph.moveTo(gx, gy);
+                        } else {
+                            ctxGraph.lineTo(gx, gy);
+                        }
+                    }
+                    ctxGraph.strokeStyle = line.color;
+                    ctxGraph.lineWidth = 1.75;
+                    ctxGraph.stroke();
+
+                    // Fill under curve (soft opacity)
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(padLeft, y0);
+                    for (let y = 0; y < img.height; y++) {
+                        const val = line.profile[y];
+                        const gx = padLeft + (val / 255) * plotW;
+                        const gy = y0 + y * scale;
+                        ctxGraph.lineTo(gx, gy);
+                    }
+                    ctxGraph.lineTo(padLeft, y0 + img.height * scale);
+                    ctxGraph.fillStyle = line.colorAlpha;
+                    ctxGraph.fill();
+                });
+
+                // Draw horizontal cursor inspector lines on plot
+                if ((mouseOnImageCanvas || mouseOnGraphCanvas) && hoverY !== null && hoverY >= 0 && hoverY < img.height) {
+                    const ly = y0 + hoverY * scale;
+
+                    ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctxGraph.lineWidth = 1;
+                    ctxGraph.setLineDash([5, 5]);
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(padLeft, ly);
+                    ctxGraph.lineTo(padLeft + plotW, ly);
+                    ctxGraph.stroke();
+                    ctxGraph.setLineDash([]); // Reset dash
+
+                    // Draw dots on curves where inspector line intersects
+                    lines.forEach(line => {
+                        if (!line.enabled || !line.profile) return;
+                        const val = line.profile[hoverY];
+                        const gx = padLeft + (val / 255) * plotW;
+
+                        ctxGraph.fillStyle = line.color;
+                        ctxGraph.beginPath();
+                        ctxGraph.arc(gx, ly, 4, 0, Math.PI * 2);
+                        ctxGraph.fill();
+                        ctxGraph.strokeStyle = '#ffffff';
+                        ctxGraph.lineWidth = 1;
+                        ctxGraph.stroke();
+                    });
+                }
+
+            } else {
+                // HORIZONTAL PLOT MODE (Standard chart: X=Depth, Y=Intensity)
+                const y0 = padTop;
+                const plotHeight = plotH;
+                const yBottom = padTop + plotHeight;
+
+                // Draw Plot Grid Lines & Ticks (Intensity Y: 0 to 255)
+                ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctxGraph.lineWidth = 1;
+                ctxGraph.fillStyle = varColor('--text-muted');
+                ctxGraph.font = '10px "JetBrains Mono", monospace';
+                ctxGraph.textAlign = 'right';
+                ctxGraph.textBaseline = 'middle';
+
+                const tickIntervalsY = [0, 50, 100, 150, 200, 255];
+                tickIntervalsY.forEach(val => {
+                    const gy = yBottom - (val / 255) * plotHeight;
+                    
+                    // Horizontal grid rows
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(padLeft, gy);
+                    ctxGraph.lineTo(padLeft + plotW, gy);
+                    ctxGraph.stroke();
+
+                    // Ticks at left
+                    ctxGraph.fillText(val, padLeft - 6, gy);
+                });
+
+                // Draw Depth X grid columns
+                ctxGraph.textAlign = 'center';
+                ctxGraph.textBaseline = 'top';
+
+                let stepX = 100;
+                if (img.height < 200) stepX = 50;
+                else if (img.height > 1000) stepX = 200;
+
+                for (let depth = 0; depth < img.height; depth += stepX) {
+                    const gx = padLeft + (depth / (img.height - 1)) * plotW;
+                    
+                    // Vertical grid line
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(gx, y0);
+                    ctxGraph.lineTo(gx, yBottom);
+                    ctxGraph.stroke();
+
+                    // Ticks at bottom
+                    ctxGraph.fillText(depth, gx, yBottom + 5);
+                }
+                
+                ctxGraph.fillText("Depth / Row Index (px)", padLeft + plotW/2, yBottom + 18);
+
+                // Draw boundary border for grid
+                ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctxGraph.strokeRect(padLeft, y0, plotW, plotHeight);
+
+                // Draw Plot Curves for each active line
+                lines.forEach(line => {
+                    if (!line.enabled || !line.profile) return;
+
+                    ctxGraph.beginPath();
+                    for (let y = 0; y < img.height; y++) {
+                        const val = line.profile[y];
+                        const gx = padLeft + (y / (img.height - 1)) * plotW;
+                        const gy = yBottom - (val / 255) * plotHeight;
+
+                        if (y === 0) {
+                            ctxGraph.moveTo(gx, gy);
+                        } else {
+                            ctxGraph.lineTo(gx, gy);
+                        }
+                    }
+                    ctxGraph.strokeStyle = line.color;
+                    ctxGraph.lineWidth = 1.75;
+                    ctxGraph.stroke();
+
+                    // Fill under curve
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(padLeft, yBottom);
+                    for (let y = 0; y < img.height; y++) {
+                        const val = line.profile[y];
+                        const gx = padLeft + (y / (img.height - 1)) * plotW;
+                        const gy = yBottom - (val / 255) * plotHeight;
+                        ctxGraph.lineTo(gx, gy);
+                    }
+                    ctxGraph.lineTo(padLeft + plotW, yBottom);
+                    ctxGraph.fillStyle = line.colorAlpha;
+                    ctxGraph.fill();
+                });
+
+                // Inspector cursor alignment (draw vertical line at depth X)
+                if ((mouseOnImageCanvas || mouseOnGraphCanvas) && hoverY !== null && hoverY >= 0 && hoverY < img.height) {
+                    const lx = padLeft + (hoverY / (img.height - 1)) * plotW;
+
+                    ctxGraph.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctxGraph.lineWidth = 1;
+                    ctxGraph.setLineDash([5, 5]);
+                    ctxGraph.beginPath();
+                    ctxGraph.moveTo(lx, y0);
+                    ctxGraph.lineTo(lx, yBottom);
+                    ctxGraph.stroke();
+                    ctxGraph.setLineDash([]);
+
+                    // Dots at intersection
+                    lines.forEach(line => {
+                        if (!line.enabled || !line.profile) return;
+                        const val = line.profile[hoverY];
+                        const gy = yBottom - (val / 255) * plotHeight;
+
+                        ctxGraph.fillStyle = line.color;
+                        ctxGraph.beginPath();
+                        ctxGraph.arc(lx, gy, 4, 0, Math.PI * 2);
+                        ctxGraph.fill();
+                        ctxGraph.strokeStyle = '#ffffff';
+                        ctxGraph.lineWidth = 1;
+                        ctxGraph.stroke();
+                    });
+                }
+            }
+        }
+
+        // Helper to grab CSS root variables
+        function varColor(cssVarName) {
+            return getComputedStyle(document.body).getPropertyValue(cssVarName).trim();
+        }
+
+        // Helper to get pixel intensity at (x, y) based on channel selection
+        function getPixelIntensity(x, y) {
+            if (!imgData) return 0;
+            const w = imgData.width;
+            const h = imgData.height;
+            if (x < 0 || x >= w || y < 0 || y >= h) return 0;
+            
+            const idx = (y * w + x) * 4;
+            const r = imgData.data[idx];
+            const g = imgData.data[idx + 1];
+            const b = imgData.data[idx + 2];
+            
+            if (channel === 'luminance') {
+                return 0.299 * r + 0.587 * g + 0.114 * b;
+            } else if (channel === 'r') {
+                return r;
+            } else if (channel === 'g') {
+                return g;
+            } else if (channel === 'b') {
+                return b;
+            }
+            return 0;
+        }
+
+        // Helper to get average pixel intensity in a radius
+        function getAverageIntensity(x, y, radius) {
+            if (!imgData) return 0;
+            if (radius <= 0) {
+                return getPixelIntensity(x, y);
+            }
+            
+            const w = imgData.width;
+            const h = imgData.height;
+            let sum = 0;
+            let count = 0;
+            
+            const r2 = radius * radius;
+            const startX = Math.max(0, x - radius);
+            const endX = Math.min(w - 1, x + radius);
+            const startY = Math.max(0, y - radius);
+            const endY = Math.min(h - 1, y + radius);
+            
+            for (let ny = startY; ny <= endY; ny++) {
+                for (let nx = startX; nx <= endX; nx++) {
+                    const dx = nx - x;
+                    const dy = ny - y;
+                    if (dx * dx + dy * dy <= r2) {
+                        sum += getPixelIntensity(nx, ny);
+                        count++;
+                    }
+                }
+            }
+            
+            return count > 0 ? sum / count : 0;
+        }
+
+        // Update visual text elements on lines settings card
+        function updateStatsUI() {
+            lines.forEach((line, index) => {
+                if (line.enabled && line.stats) {
+                    document.getElementById(`line-min-${index}`).innerText = line.stats.min;
+                    document.getElementById(`line-max-${index}`).innerText = line.stats.max;
+                    document.getElementById(`line-mean-${index}`).innerText = line.stats.mean;
+                } else {
+                    document.getElementById(`line-min-${index}`).innerText = '-';
+                    document.getElementById(`line-max-${index}`).innerText = '-';
+                    document.getElementById(`line-mean-${index}`).innerText = '-';
+                }
+            });
+        }
+
+        // Math converters between visible canvas element space and raw image dimensions
+        function getImageMappingParams() {
+            if (!img) return { scale: 1, offsetX: 0, offsetY: 0 };
+            
+            const cw = canvasImg.width;
+            const ch = canvasImg.height;
+            const iw = img.width;
+            const ih = img.height;
+            
+            const scale = Math.min(cw / iw, ch / ih);
+            const offsetX = (cw - iw * scale) / 2;
+            const offsetY = (ch - ih * scale) / 2;
+            
+            return { scale, offsetX, offsetY };
+        }
+
+        // Interaction coordinates converters for canvas elements
+        function getMouseCoordsOnImage(event) {
+            const rect = canvasImg.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            
+            const { scale, offsetX, offsetY } = getImageMappingParams();
+            
+            // Inverse mapping calculations
+            const imgX = Math.round((mouseX - offsetX) / scale);
+            const imgY = Math.round((mouseY - offsetY) / scale);
+            
+            return { imgX, imgY, rawX: mouseX, rawY: mouseY };
+        }
+
+        // Image canvas mousedown handler
+        function onImgMouseDown(e) {
+            const { imgX, imgY } = getMouseCoordsOnImage(e);
+            const { scale } = getImageMappingParams();
+
+            // Detect if clicked close to a centerline or handle
+            let closestLineId = null;
+            let minDist = 12; // Click boundary tolerance in screen pixels
+
+            lines.forEach(line => {
+                if (!line.enabled) return;
+                const dist = Math.abs(line.x - imgX) * scale;
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestLineId = line.id;
+                }
+            });
+
+            if (closestLineId !== null) {
+                draggingLineId = closestLineId;
+                canvasImg.style.cursor = 'ew-resize';
+            }
+        }
+
+        // Image canvas mousemove handler
+        function onImgMouseMove(e) {
+            const { imgX, imgY, rawX, rawY } = getMouseCoordsOnImage(e);
+            const { scale, offsetX, offsetY } = getImageMappingParams();
+
+            mouseOnImageCanvas = true;
+
+            // If we are dragging a line
+            if (draggingLineId !== null) {
+                const newX = Math.max(0, Math.min(img.width - 1, imgX));
+                lines[draggingLineId].x = newX;
+                
+                // Sync positions on slider panel
+                document.getElementById(`line-x-${draggingLineId}`).value = newX;
+                document.getElementById(`line-x-val-${draggingLineId}`).value = newX;
+                document.getElementById(`line-x-val-txt-${draggingLineId}`).innerText = newX;
+
+                calculateProfiles();
+                drawAll();
+                updateStatsUI();
+                
+                // Keep cursor as drag
+                canvasImg.style.cursor = 'ew-resize';
+                
+                // Tooltip follow while dragging
+                updateTooltip(e.clientX, e.clientY, newX, imgY);
+                return;
+            }
+
+            // Check if cursor hover is near a centerline to adjust cursor pointer
+            let nearLine = false;
+            lines.forEach(line => {
+                if (!line.enabled) return;
+                const dist = Math.abs(line.x - imgX) * scale;
+                if (dist < 10) {
+                    nearLine = true;
+                }
+            });
+
+            if (nearLine) {
+                canvasImg.style.cursor = 'ew-resize';
+            } else {
+                canvasImg.style.cursor = 'crosshair';
+            }
+
+            // Update inspection depth
+            if (imgY >= 0 && imgY < img.height && imgX >= 0 && imgX < img.width) {
+                hoverY = imgY;
+                hoverX = imgX;
+                updateTooltip(e.clientX, e.clientY, imgX, imgY);
+            } else {
+                hoverY = null;
+                hoverX = null;
+                hideTooltip();
+            }
+
+            drawAll();
+        }
+
+        function onImgMouseLeave() {
+            mouseOnImageCanvas = false;
+            if (draggingLineId === null) {
+                hoverY = null;
+                hoverX = null;
+                hideTooltip();
+                drawAll();
+            }
+        }
+
+        // Graph canvas mouse inspector hover mappings
+        function onGraphMouseMove(e) {
+            if (!img) return;
+
+            const rect = canvasGraph.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const w = canvasGraph.width;
+            const h = canvasGraph.height;
+            
+            const padLeft = 45;
+            const padRight = 20;
+            const padTop = 15;
+            const padBottom = 30;
+
+            const plotW = w - padLeft - padRight;
+            const plotH = h - padTop - padBottom;
+
+            mouseOnGraphCanvas = true;
+
+            if (orientation === 'vertical') {
+                const { scale, offsetY } = getImageMappingParams();
+                const startY = offsetY;
+                const plotHeight = img.height * scale;
+
+                // Inverse maps mouse canvas Y to image depth Y
+                const imgY = Math.round((mouseY - startY) / scale);
+
+                if (imgY >= 0 && imgY < img.height && mouseX >= padLeft && mouseX <= padLeft + plotW) {
+                    hoverY = imgY;
+                    updateTooltip(e.clientX, e.clientY, imgY);
+                } else {
+                    hoverY = null;
+                    hideTooltip();
+                }
+            } else {
+                // Horizontal mode: X-axis represents depth Y
+                const imgY = Math.round(((mouseX - padLeft) / plotW) * (img.height - 1));
+
+                if (imgY >= 0 && imgY < img.height && mouseY >= padTop && mouseY <= padTop + plotH) {
+                    hoverY = imgY;
+                    updateTooltip(e.clientX, e.clientY, imgY);
+                } else {
+                    hoverY = null;
+                    hideTooltip();
+                }
+            }
+
+            drawAll();
+        }
+
+        function onGraphMouseLeave() {
+            mouseOnGraphCanvas = false;
+            hoverY = null;
+            hideTooltip();
+            drawAll();
+        }
+
+        // Multi-line tooltip display on coordinates hover
+        function updateTooltip(clientX, clientY, imgX, imgY) {
+            // Handle signature update: if only 3 arguments, it's (clientX, clientY, imgY)
+            if (imgY === undefined) {
+                imgY = imgX;
+                imgX = null;
+            }
+
+            if (imgY === null || imgY < 0 || imgY >= img.height) {
+                hideTooltip();
+                return;
+            }
+
+            const tooltip = document.getElementById('inspector');
+            const title = document.getElementById('tooltip-title');
+            
+            title.innerText = `Depth: ${imgY} px`;
+
+            // Hover details
+            const hoverPosEl = document.getElementById('hover-pos');
+            const hoverIntensityValEl = document.getElementById('hover-intensity-val');
+            const hoverIntensityLblEl = document.getElementById('hover-intensity-lbl');
+            const dividerEl = document.getElementById('hover-divider-1');
+
+            if (imgX !== null && imgX !== undefined && imgX >= 0 && imgX < img.width) {
+                hoverPosEl.innerText = `X: ${imgX}, Y: ${imgY}`;
+                hoverPosEl.parentElement.style.display = 'flex';
+                
+                if (hoverRadius > 0) {
+                    hoverIntensityLblEl.innerText = `Avg Intensity (r=${hoverRadius}):`;
+                    const avgVal = getAverageIntensity(imgX, imgY, hoverRadius);
+                    hoverIntensityValEl.innerText = avgVal.toFixed(1);
+                } else {
+                    hoverIntensityLblEl.innerText = `Pixel Intensity:`;
+                    const val = getPixelIntensity(imgX, imgY);
+                    hoverIntensityValEl.innerText = Math.round(val);
+                }
+                hoverIntensityValEl.parentElement.style.display = 'flex';
+                dividerEl.style.display = 'block';
+            } else {
+                hoverPosEl.parentElement.style.display = 'none';
+                hoverIntensityValEl.parentElement.style.display = 'none';
+                dividerEl.style.display = 'none';
+            }
+
+            lines.forEach((line, index) => {
+                const valEl = document.getElementById(`val-l${index + 1}`);
+                
+                if (line.enabled && line.profile) {
+                    valEl.innerText = Math.round(line.profile[imgY]);
+                    valEl.parentElement.style.display = 'flex';
+                } else {
+                    valEl.parentElement.style.display = 'none';
+                }
+            });
+
+            // Position the tooltip near cursor
+            tooltip.style.display = 'block';
+            tooltip.style.left = `${clientX + 15}px`;
+            tooltip.style.top = `${clientY + 15}px`;
+        }
+
+        function hideTooltip() {
+            document.getElementById('inspector').style.display = 'none';
+        }
+
+        // Export data matrix (lines values vs depth) as CSV download file
+        function exportCSV() {
+            if (!img || !imgData) return;
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            
+            // Header definition
+            let headers = ["Depth (px)"];
+            lines.forEach(line => {
+                if (line.enabled) {
+                    headers.push(`${line.name} (X=${line.x} Width=${line.width})`);
+                }
+            });
+            csvContent += headers.join(",") + "\r\n";
+
+            // Row-wise intensities data packing
+            for (let y = 0; y < img.height; y++) {
+                let row = [y];
+                lines.forEach(line => {
+                    if (line.enabled && line.profile) {
+                        row.push(line.profile[y].toFixed(2));
+                    }
+                });
+                csvContent += row.join(",") + "\r\n";
+            }
+
+            // File downloading triggers
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            
+            // Timestamp naming
+            const date = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+            const filename = `oct_intensity_profile_${date}.csv`;
+            
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", filename);
+            document.body.appendChild(link); // Required for FF
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
