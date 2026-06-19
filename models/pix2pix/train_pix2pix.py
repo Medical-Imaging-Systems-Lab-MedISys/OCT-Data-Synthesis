@@ -460,9 +460,35 @@ def main():
         print(f"Using remote MLflow tracking server: {tracking_uri}")
 
     mlflow.set_experiment(config['experiment_name'])
+    
+    # Set detailed markdown description for the experiment
+    try:
+        experiment = mlflow.get_experiment_by_name(config['experiment_name'])
+        if experiment:
+            client = mlflow.tracking.MlflowClient()
+            experiment_description = (
+                "# Pix2Pix Retinal OCT Image Translation Experiment\n\n"
+                "This experiment trains a conditional GAN (Pix2Pix) mapping procedurally synthesized "
+                "speckled OCT images to real-looking OCT scans.\n\n"
+                "## Dataset Summary:\n"
+                f"- **Training Set Size:** {len(train_dataset)} paired samples\n"
+                f"- **Testing Set Size:** {len(test_dataset)} paired samples\n"
+                f"- **Validation Visuals Batch Size:** 16 samples\n"
+                f"- **Target Resolution:** {config['img_size']}x{config['img_size']} (Square)\n\n"
+                "## Model Components:\n"
+                "- **Generator:** U-Net architecture with skip connections.\n"
+                "- **Discriminator:** PatchGAN (70x70) classifying concatenated (synthetic, target) pairs.\n"
+                "- **Loss Functions:** BCEWithLogitsLoss (Adversarial) + L1Loss (Pixel-wise reconstruction)."
+            )
+            client.set_experiment_tag(experiment.experiment_id, "mlflow.note.content", experiment_description)
+    except Exception as e:
+        print(f"Warning: Could not set experiment description: {e}")
+
     run_name = f"Pix2Pix_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     
     with mlflow.start_run(run_name=run_name) as run:
+        # Set run description note
+        mlflow.set_tag("mlflow.note.content", f"Pix2Pix training run at {run_name} with batch size {config['batch_size']}, {config['epochs']} epochs, and {config['img_size']}x{config['img_size']} resolution.")
         mlflow.log_params(config)
         mlflow.log_artifact(args.config)
         

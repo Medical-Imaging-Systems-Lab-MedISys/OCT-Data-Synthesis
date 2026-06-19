@@ -62,6 +62,25 @@ if tracking_uri:
     print(f"Using remote MLflow tracking server: {tracking_uri}")
 
 mlflow.set_experiment(experiment_name)
+
+# Set detailed markdown description for the experiment
+try:
+    experiment = mlflow.get_experiment_by_name(experiment_name)
+    if experiment:
+        client = mlflow.tracking.MlflowClient()
+        experiment_description = (
+            "# Linear Conditional GAN Retinal OCT Generation Experiment\n\n"
+            "This experiment trains a baseline linear Conditional GAN (cGAN) to generate real-looking "
+            "OCT scans conditioned on flattened layer segmentation masks.\n\n"
+            "## Model Components:\n"
+            "- **Generator:** Linear/Fully-Connected network mapping (noise z + flattened mask) to flattened images.\n"
+            "- **Discriminator:** Linear/Fully-Connected network classifying (image + mask) pairs.\n"
+            "- **Loss Functions:** BCELoss (Adversarial)."
+        )
+        client.set_experiment_tag(experiment.experiment_id, "mlflow.note.content", experiment_description)
+except Exception as e:
+    print(f"Warning: Could not set experiment description: {e}")
+
 run_name = f"{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
 
@@ -290,6 +309,8 @@ def main():
     d_optimizer = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
     
     with mlflow.start_run(run_name=run_name) as run:
+        # Set run description note
+        mlflow.set_tag("mlflow.note.content", f"Linear cGAN training run with batch size {batch_size}, {epochs} epochs, and {img_size}x{img_size} resolution.")
         # Log parameters
         mlflow.log_params(config)
         # Log configuration file as artifact
