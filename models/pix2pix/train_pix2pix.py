@@ -365,7 +365,7 @@ def verify_setup(config):
 
 def main():
     parser = argparse.ArgumentParser(description="Pix2Pix Training script for OCT Image Translation")
-    parser.add_argument('--config', type=str, default='config_pix2pix.json', help='Path to configuration file')
+    parser.add_argument('--config', type=str, default='models/pix2pix/config_pix2pix.json', help='Path to configuration file')
     parser.add_argument('--verify', action='store_true', help='Only verify models and forward/backward logic without training')
     args = parser.parse_args()
     

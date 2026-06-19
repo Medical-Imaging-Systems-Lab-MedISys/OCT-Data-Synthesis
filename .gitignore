@@ -29,9 +29,9 @@ test_checkpoints/
 *.err
 
 # Cloned repositories and generated datasets
-pix2pix/
-pytorch-CycleGAN-and-pix2pix/
-synthetic_dataset/
-synthetic_dataset_clean/
+/pix2pix/
+/pytorch-CycleGAN-and-pix2pix/
+/synthetic_dataset/
+/synthetic_dataset_clean/
 
 

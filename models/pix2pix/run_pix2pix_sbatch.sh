@@ -23,14 +23,14 @@ mkdir -p "$LOCAL_SCRATCH"
 cp -r ./NR206 "$LOCAL_SCRATCH/"
 
 # Backup config_pix2pix.json and rewrite dataset paths to point to SSD scratch
-cp config_pix2pix.json config_pix2pix_backup.json
-sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" config_pix2pix.json
+cp models/pix2pix/config_pix2pix.json models/pix2pix/config_pix2pix_backup.json
+sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" models/pix2pix/config_pix2pix.json
 
 # 3. Execute Training
-srun python train_pix2pix.py --config config_pix2pix.json
+srun python models/pix2pix/train_pix2pix.py --config models/pix2pix/config_pix2pix.json
 
 # 4. Post-Run Cleanup
 echo "Restoring configuration file and cleaning up SSD scratch..."
-mv config_pix2pix_backup.json config_pix2pix.json
+mv models/pix2pix/config_pix2pix_backup.json models/pix2pix/config_pix2pix.json
 rm -rf "$LOCAL_SCRATCH"
 echo "Cleanup completed successfully!"

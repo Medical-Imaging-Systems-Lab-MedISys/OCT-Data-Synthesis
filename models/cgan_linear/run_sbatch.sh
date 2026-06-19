@@ -23,13 +23,13 @@ source activate /data/team-xxx/env_pt
 # cp -r ./NR206 "$LOCAL_SCRATCH/"
 #
 # # Backup config.json and point to scratch path
-# cp config.json config_backup.json
-# sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" config.json
+# cp models/cgan_linear/config.json models/cgan_linear/config_backup.json
+# sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" models/cgan_linear/config.json
 
 # 3. Execute Training
 NUM_GPUS=4
-srun python conditional-GAN-generating-NR206.py --num_gpus $NUM_GPUS
+srun python models/cgan_linear/conditional-GAN-generating-NR206.py --num_gpus $NUM_GPUS
 
 # 4. Optional: Staging Cleanup (Mandatory if staging was enabled)
-# mv config_backup.json config.json
+# mv models/cgan_linear/config_backup.json models/cgan_linear/config.json
 # rm -rf "$LOCAL_SCRATCH"
