@@ -112,6 +112,11 @@ class NR206Dataset(Dataset):
         img = Image.open(img_path).convert('L')
         mask = Image.open(mask_path).convert('L')
         
+        # Remove watermark on the bottom-left corner of the real image (in original 500x750 coordinate space)
+        img_np = np.array(img)
+        img_np[350:, :150] = 0
+        img = Image.fromarray(img_np)
+        
         # Resize
         img = img.resize((self.img_size, self.img_size), Image.BILINEAR)
         mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)

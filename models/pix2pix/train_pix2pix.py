@@ -168,6 +168,11 @@ class PairedOCTDataset(Dataset):
         synth_img = Image.open(synth_path).convert('L')
         real_img = Image.open(real_path).convert('L')
         
+        # Remove watermark on the bottom-left corner of the real image (in original 500x750 coordinate space)
+        real_np = np.array(real_img)
+        real_np[350:, :150] = 0
+        real_img = Image.fromarray(real_np)
+        
         # Resize to specified training resolution
         synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
         real_img = real_img.resize((self.img_size, self.img_size), Image.BILINEAR)
