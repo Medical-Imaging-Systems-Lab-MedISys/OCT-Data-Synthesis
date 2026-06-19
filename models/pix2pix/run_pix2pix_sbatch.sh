@@ -16,13 +16,19 @@ module load Miniforge3/26.1.1-3
 # Activate your cluster conda environment
 source activate /data/vds/env_pt
 
-# 2. Check MLflow remote tracking credentials
+# 2. Check MLflow remote tracking credentials (either env vars or .netrc)
 if [ -z "$MLFLOW_TRACKING_USERNAME" ] || [ -z "$MLFLOW_TRACKING_PASSWORD" ]; then
-    echo "ERROR: Remote MLflow tracker credentials are not set in your environment!"
-    echo "Please export your DAGsHub credentials before running this script:"
-    echo "  export MLFLOW_TRACKING_USERNAME=\"Mohan5353\""
-    echo "  export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
-    exit 1
+    if [ ! -f ~/.netrc ] || ! grep -q "machine dagshub.com" ~/.netrc; then
+        echo "ERROR: Remote MLflow tracker credentials are not set!"
+        echo "Please set them using either of the following methods:"
+        echo "  Method 1: Export them to your environment:"
+        echo "            export MLFLOW_TRACKING_USERNAME=\"Mohan5353\""
+        echo "            export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
+        echo "  Method 2: Save them securely in ~/.netrc:"
+        echo "            echo -e \"machine dagshub.com\\\nlogin Mohan5353\\\npassword YOUR_DAGSHUB_TOKEN\" >> ~/.netrc"
+        echo "            chmod 600 ~/.netrc"
+        exit 1
+    fi
 fi
 
 # 3. Stage dataset to local NVMe SSD (/tmp) for high-performance I/O
