@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1               # Request 1 GPU resource
 #SBATCH --partition=normal
 #SBATCH --time=24:00:00
-#SBATCH --output=pix2pix_oct_%j.out
-#SBATCH --error=pix2pix_oct_%j.err
+#SBATCH --output=logs/pix2pix_oct_%j.out
+#SBATCH --error=logs/pix2pix_oct_%j.err
 #SBATCH --chdir=/data/vds/mmk/Codes/oct_data_synthesis/   # Ensure job starts from the correct directory
 
 # 1. Environment Initialization

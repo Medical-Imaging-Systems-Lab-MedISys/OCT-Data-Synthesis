@@ -27,6 +27,7 @@ test_checkpoints/
 # Job outputs
 *.out
 *.err
+/logs/
 
 # Cloned repositories and generated datasets
 /pix2pix/

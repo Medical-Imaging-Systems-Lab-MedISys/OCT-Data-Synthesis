@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:4               # Request GPU resources (Matches 'num_gpus' in config.json)
 #SBATCH --partition=normal
 #SBATCH --time=24:00:00
-#SBATCH --output=cgan_nr206_%j.out
-#SBATCH --error=cgan_nr206_%j.err
+#SBATCH --output=logs/cgan_nr206_%j.out
+#SBATCH --error=logs/cgan_nr206_%j.err
 #SBATCH --chdir=/data/vds/mmk/Codes/oct_data_synthesis/   # Ensure job starts from the correct directory
 
 # 1. Environment Initialization (LMod + Conda)
