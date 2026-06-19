@@ -4,7 +4,7 @@
   "test_data_path": "./NR206/test",
   "test_labels_path": "./NR206/test_labels",
   "img_size": 128,
-  "batch_size": 16,
+  "batch_size": 128,
   "epochs": 100,
   "learning_rate": 0.0002,
   "beta1": 0.5,
