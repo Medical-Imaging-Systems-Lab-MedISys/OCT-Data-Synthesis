@@ -253,12 +253,14 @@ class UNetGenerator(nn.Module):
 class PatchGANDiscriminator(nn.Module):
     def __init__(self, input_nc=2, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d):
         """
-        PatchGAN (70x70) Classifier.
+        PatchGAN (70x70) Classifier with Spectral Normalization.
         Takes concatenated input/target images and classifies local patches.
         """
         super().__init__()
+        import torch.nn.utils.spectral_norm as spectral_norm
+        
         model = [
-            nn.Conv2d(input_nc, ndf, kernel_size=4, stride=2, padding=1),
+            spectral_norm(nn.Conv2d(input_nc, ndf, kernel_size=4, stride=2, padding=1)),
             nn.LeakyReLU(0.2, True)
         ]
         
@@ -267,7 +269,7 @@ class PatchGANDiscriminator(nn.Module):
             nf_mult_prev = nf_mult
             nf_mult = min(2 ** n, 8)
             model += [
-                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=2, padding=1, bias=False),
+                spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=2, padding=1, bias=False)),
                 norm_layer(ndf * nf_mult),
                 nn.LeakyReLU(0.2, True)
             ]
@@ -275,12 +277,12 @@ class PatchGANDiscriminator(nn.Module):
         nf_mult_prev = nf_mult
         nf_mult = min(2 ** n_layers, 8)
         model += [
-            nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=1, padding=1, bias=False),
+            spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=1, padding=1, bias=False)),
             norm_layer(ndf * nf_mult),
             nn.LeakyReLU(0.2, True)
         ]
         
-        model += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=4, stride=1, padding=1)]
+        model += [spectral_norm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=4, stride=1, padding=1))]
         self.model = nn.Sequential(*model)
 
     def forward(self, x):
@@ -323,8 +325,8 @@ def verify_setup(config):
     print(f"Device: {device}")
     
     # Initialize networks
-    generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size']).to(device)
-    discriminator = PatchGANDiscriminator(input_nc=2).to(device)
+    generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'], norm_layer=nn.InstanceNorm2d).to(device)
+    discriminator = PatchGANDiscriminator(input_nc=2, norm_layer=nn.InstanceNorm2d).to(device)
     generator.apply(init_weights)
     discriminator.apply(init_weights)
     
@@ -421,8 +423,8 @@ def main():
     test_real_imgs = test_real_imgs.to(device)
     
     # Network Initialization
-    generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'])
-    discriminator = PatchGANDiscriminator(input_nc=2)
+    generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'], norm_layer=nn.InstanceNorm2d)
+    discriminator = PatchGANDiscriminator(input_nc=2, norm_layer=nn.InstanceNorm2d)
     
     # Weights initialization
     generator.apply(init_weights)
@@ -482,8 +484,8 @@ def main():
                 f"- **Validation Visuals Batch Size:** 16 samples\n"
                 f"- **Target Resolution:** {config['img_size']}x{config['img_size']} (Square)\n\n"
                 "## Model Components:\n"
-                "- **Generator:** U-Net architecture with skip connections.\n"
-                "- **Discriminator:** PatchGAN (70x70) classifying concatenated (synthetic, target) pairs.\n"
+                "- **Generator:** U-Net architecture with skip connections (Instance Normalization).\n"
+                "- **Discriminator:** PatchGAN classifying concatenated (synthetic, target) pairs (Instance Normalization + Spectral Normalization).\n"
                 "- **Loss Functions:** BCEWithLogitsLoss (Adversarial) + L1Loss (Pixel-wise reconstruction)."
             )
             client.set_experiment_tag(experiment.experiment_id, "mlflow.note.content", experiment_description)
@@ -494,7 +496,17 @@ def main():
     
     with mlflow.start_run(run_name=run_name) as run:
         # Set run description note
-        mlflow.set_tag("mlflow.note.content", f"Pix2Pix training run at {run_name} with batch size {config['batch_size']}, {config['epochs']} epochs, and {config['img_size']}x{config['img_size']} resolution.")
+        run_description = (
+            f"**Run:** {run_name}\n\n"
+            f"**Configuration Summary:**\n"
+            f"- **Resolution:** {config['img_size']}x{config['img_size']}\n"
+            f"- **Batch Size:** {config['batch_size']}\n"
+            f"- **Epochs:** {config['epochs']}\n"
+            f"- **L1 Lambda:** {config['lambda_L1']}\n"
+            f"- **Generator:** U-Net (InstanceNorm2d)\n"
+            f"- **Discriminator:** PatchGAN (InstanceNorm2d + SpectralNorm)"
+        )
+        mlflow.set_tag("mlflow.note.content", run_description)
         mlflow.log_params(config)
         mlflow.log_artifact(args.config)
         
@@ -509,6 +521,8 @@ def main():
             print(f"Starting epoch {epoch + 1}/{epochs}...")
             
             g_losses = []
+            g_losses_gan = []
+            g_losses_l1 = []
             d_losses = []
             
             generator.train()
@@ -556,13 +570,19 @@ def main():
                 optimizer_G.step()
                 
                 g_losses.append(loss_G.item())
+                g_losses_gan.append(loss_G_GAN.item())
+                g_losses_l1.append(loss_G_L1.item())
                 d_losses.append(loss_D.item())
                 
             mean_g_loss = np.mean(g_losses)
+            mean_g_loss_gan = np.mean(g_losses_gan)
+            mean_g_loss_l1 = np.mean(g_losses_l1)
             mean_d_loss = np.mean(d_losses)
             
-            print(f"Epoch {epoch+1} - G loss: {mean_g_loss:.4f}, D loss: {mean_d_loss:.4f}")
+            print(f"Epoch {epoch+1} - G loss: {mean_g_loss:.4f} (GAN: {mean_g_loss_gan:.4f}, L1: {mean_g_loss_l1:.4f}), D loss: {mean_d_loss:.4f}")
             mlflow.log_metric("g_loss", mean_g_loss, step=epoch)
+            mlflow.log_metric("g_loss_gan", mean_g_loss_gan, step=epoch)
+            mlflow.log_metric("g_loss_l1", mean_g_loss_l1, step=epoch)
             mlflow.log_metric("d_loss", mean_d_loss, step=epoch)
             
             # Periodically save test visuals (inputs & outputs of generator & discriminator)
