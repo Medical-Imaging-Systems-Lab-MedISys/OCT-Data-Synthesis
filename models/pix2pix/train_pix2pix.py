@@ -507,8 +507,20 @@ def main():
             f"- **Discriminator:** PatchGAN (InstanceNorm2d + SpectralNorm)"
         )
         mlflow.set_tag("mlflow.note.content", run_description)
+        mlflow.set_tag("Resolution", f"{config['img_size']}x{config['img_size']}")
+        mlflow.set_tag("Generator", "U-Net-InstanceNorm")
+        mlflow.set_tag("Discriminator", "PatchGAN-InstanceNorm-SpectralNorm")
+        mlflow.set_tag("L1_Lambda", str(config['lambda_L1']))
+        
         mlflow.log_params(config)
         mlflow.log_artifact(args.config)
+        
+        # Log to local markdown file
+        os.makedirs("docs", exist_ok=True)
+        local_log_path = os.path.join("docs", "experiments_log.md")
+        with open(local_log_path, "a") as log_file:
+            log_file.write(f"\n---\n\n## {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {run_name}\n")
+            log_file.write(run_description + "\n")
         
         # Save fixed visual setup
         synth_grid = vutils.make_grid(test_synth_imgs, nrow=4, normalize=True)
