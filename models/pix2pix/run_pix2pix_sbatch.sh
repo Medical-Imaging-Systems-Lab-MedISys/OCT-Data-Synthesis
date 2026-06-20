@@ -16,20 +16,7 @@ module load Miniforge3/26.1.1-3
 # Activate your cluster conda environment
 source activate /data/vds/env_pt
 
-# 2. Check MLflow remote tracking credentials (either env vars or .netrc)
-if [ -z "$MLFLOW_TRACKING_USERNAME" ] || [ -z "$MLFLOW_TRACKING_PASSWORD" ]; then
-    if [ ! -f ~/.netrc ] || ! grep -q "machine dagshub.com" ~/.netrc; then
-        echo "ERROR: Remote MLflow tracker credentials are not set!"
-        echo "Please set them using either of the following methods:"
-        echo "Please export your DAGsHub credentials before running this script:"
-        echo "  export MLFLOW_TRACKING_USERNAME=\"IISc-MedISys\""
-        echo "  export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
-        echo "  Method 2: Save them securely in ~/.netrc:"
-        echo "            echo -e \"machine dagshub.com\\nlogin IISc-MedISys\\npassword YOUR_DAGSHUB_TOKEN\" >> ~/.netrc"
-        echo "            chmod 600 ~/.netrc"
-        exit 1
-    fi
-fi
+
 
 # 3. Stage dataset to local NVMe SSD (/tmp) for high-performance I/O
 LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_JOB_ID}"
