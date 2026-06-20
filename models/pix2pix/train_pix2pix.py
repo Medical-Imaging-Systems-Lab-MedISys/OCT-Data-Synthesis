@@ -326,7 +326,7 @@ def verify_setup(config):
     
     # Initialize networks
     generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'], norm_layer=nn.InstanceNorm2d).to(device)
-    discriminator = PatchGANDiscriminator(input_nc=2, norm_layer=nn.InstanceNorm2d).to(device)
+    discriminator = PatchGANDiscriminator(input_nc=2, n_layers=config.get('n_layers_D', 3), norm_layer=nn.InstanceNorm2d).to(device)
     generator.apply(init_weights)
     discriminator.apply(init_weights)
     
@@ -424,7 +424,7 @@ def main():
     
     # Network Initialization
     generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'], norm_layer=nn.InstanceNorm2d)
-    discriminator = PatchGANDiscriminator(input_nc=2, norm_layer=nn.InstanceNorm2d)
+    discriminator = PatchGANDiscriminator(input_nc=2, n_layers=config.get('n_layers_D', 3), norm_layer=nn.InstanceNorm2d)
     
     # Weights initialization
     generator.apply(init_weights)
@@ -495,7 +495,9 @@ def main():
     run_name = f"Pix2Pix_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     
     with mlflow.start_run(run_name=run_name) as run:
-        # Set run description note
+        n_layers = config.get('n_layers_D', 3)
+        disc_desc = f"PatchGAN ({n_layers}-Layers, InstanceNorm + SpectralNorm)"
+        
         run_description = (
             f"**Run:** {run_name}\n\n"
             f"**Configuration Summary:**\n"
@@ -504,12 +506,12 @@ def main():
             f"- **Epochs:** {config['epochs']}\n"
             f"- **L1 Lambda:** {config['lambda_L1']}\n"
             f"- **Generator:** U-Net (InstanceNorm2d)\n"
-            f"- **Discriminator:** PatchGAN (InstanceNorm2d + SpectralNorm)"
+            f"- **Discriminator:** {disc_desc}"
         )
         mlflow.set_tag("mlflow.note.content", run_description)
         mlflow.set_tag("Resolution", f"{config['img_size']}x{config['img_size']}")
         mlflow.set_tag("Generator", "U-Net-InstanceNorm")
-        mlflow.set_tag("Discriminator", "PatchGAN-InstanceNorm-SpectralNorm")
+        mlflow.set_tag("Discriminator", disc_desc)
         mlflow.set_tag("L1_Lambda", str(config['lambda_L1']))
         
         mlflow.log_params(config)
