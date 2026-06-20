@@ -10,7 +10,7 @@
   "beta1": 0.5,
   "lambda_L1": 100.0,
   "experiment_name": "OCT_Synthesis_Pix2Pix",
-  "mlflow_tracking_uri": "https://dagshub.com/Mohan5353/OCT-Data-Synthesis.mlflow",
+  "mlflow_tracking_uri": "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow",
   "use_multi_gpu": true,
   "small_dataset_threshold": 50,
   "num_gpus": 4

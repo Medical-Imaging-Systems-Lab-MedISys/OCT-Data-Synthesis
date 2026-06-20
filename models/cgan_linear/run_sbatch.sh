@@ -21,11 +21,11 @@ if [ -z "$MLFLOW_TRACKING_USERNAME" ] || [ -z "$MLFLOW_TRACKING_PASSWORD" ]; the
     if [ ! -f ~/.netrc ] || ! grep -q "machine dagshub.com" ~/.netrc; then
         echo "ERROR: Remote MLflow tracker credentials are not set!"
         echo "Please set them using either of the following methods:"
-        echo "  Method 1: Export them to your environment:"
-        echo "            export MLFLOW_TRACKING_USERNAME=\"Mohan5353\""
-        echo "            export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
+        echo "Please export your DAGsHub credentials before running this script:"
+        echo "  export MLFLOW_TRACKING_USERNAME=\"IISc-MedISys\""
+        echo "  export MLFLOW_TRACKING_PASSWORD=\"YOUR_DAGSHUB_TOKEN\""
         echo "  Method 2: Save them securely in ~/.netrc:"
-        echo "            echo -e \"machine dagshub.com\\\nlogin Mohan5353\\\npassword YOUR_DAGSHUB_TOKEN\" >> ~/.netrc"
+        echo "            echo -e \"machine dagshub.com\\nlogin IISc-MedISys\\npassword YOUR_DAGSHUB_TOKEN\" >> ~/.netrc"
         echo "            chmod 600 ~/.netrc"
         exit 1
     fi
