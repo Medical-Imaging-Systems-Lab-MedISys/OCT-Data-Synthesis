@@ -32,6 +32,11 @@ CONFIG_BACKUP="models/pix2pix/config_exp${SLURM_ARRAY_TASK_ID}_backup.json"
 cp "$CONFIG_FILE" "$CONFIG_BACKUP"
 sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" "$CONFIG_FILE"
 
+# Stagger the start time of each task by 15 seconds to prevent overwhelming the MLflow API
+STAGGER_DELAY=$((SLURM_ARRAY_TASK_ID * 15))
+echo "Staggering start by $STAGGER_DELAY seconds to prevent MLflow API timeout..."
+sleep $STAGGER_DELAY
+
 # 4. Execute Training
 srun python models/pix2pix/train_pix2pix.py --config "$CONFIG_FILE"
 
