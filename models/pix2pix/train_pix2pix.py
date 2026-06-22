@@ -376,7 +376,9 @@ def verify_setup(config):
     
     # Loss functions
     criterion_GAN = nn.BCEWithLogitsLoss()
-    criterion_L1 = nn.L1Loss()
+    use_L2 = 'lambda_L2' in config
+    criterion_Pixel = nn.MSELoss() if use_L2 else nn.L1Loss()
+    pixel_lambda = config.get('lambda_L2', config.get('lambda_L1', 100.0))
     
     # Calculate losses & backward pass test
     loss_D_real = criterion_GAN(pred_real, torch.ones_like(pred_real))
@@ -388,9 +390,9 @@ def verify_setup(config):
     
     # Generator backward test
     pred_fake_g = discriminator(torch.cat([dummy_synthetic, fake_real], dim=1))
-    loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
-    loss_G_L1 = criterion_L1(fake_real, dummy_real) * config['lambda_L1']
-    loss_G = loss_G_GAN + loss_G_L1
+    loss_G_GAN = criterion_GAN(pred_fake, torch.ones_like(pred_fake))
+    loss_G_Pixel = criterion_Pixel(fake_real, dummy_real) * pixel_lambda
+    loss_G = loss_G_GAN + loss_G_Pixel
     
     loss_G.backward()
     print("Generator backward pass successful.")
@@ -471,7 +473,10 @@ def main():
     
     # Loss functions & Optimizers
     criterion_GAN = nn.BCEWithLogitsLoss()
-    criterion_L1 = nn.L1Loss()
+    use_L2 = 'lambda_L2' in config
+    criterion_Pixel = nn.MSELoss() if use_L2 else nn.L1Loss()
+    pixel_lambda = config.get('lambda_L2', config.get('lambda_L1', 100.0))
+    pixel_loss_name = "L2Loss (MSE)" if use_L2 else "L1Loss (MAE)"
     
     optimizer_G = optim.Adam(generator.parameters(), lr=config['learning_rate'], betas=(config['beta1'], 0.999))
     optimizer_D = optim.Adam(discriminator.parameters(), lr=config['learning_rate'], betas=(config['beta1'], 0.999))
@@ -501,7 +506,7 @@ def main():
                 "## Model Components:\n"
                 "- **Generator:** U-Net architecture with skip connections (Instance Normalization).\n"
                 "- **Discriminator:** PatchGAN classifying concatenated (synthetic, target) pairs (Instance Normalization + Spectral Normalization).\n"
-                "- **Loss Functions:** BCEWithLogitsLoss (Adversarial) + L1Loss (Pixel-wise reconstruction)."
+                f"- **Loss Functions:** BCEWithLogitsLoss (Adversarial) + {pixel_loss_name} (Pixel-wise reconstruction).\n"
             )
             client.set_experiment_tag(experiment.experiment_id, "mlflow.note.content", experiment_description)
     except Exception as e:
@@ -591,16 +596,17 @@ def main():
                 pred_fake_g = discriminator(fake_pair_g)
                 loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
                 
-                # Pixel-wise similarity (L1 Loss)
-                loss_G_L1 = criterion_L1(fake_imgs, real_imgs) * config['lambda_L1']
+                # Pixel-wise loss
+                loss_G_Pixel = criterion_Pixel(fake_imgs, real_imgs) * pixel_lambda
                 
-                loss_G = loss_G_GAN + loss_G_L1
+                # Total Generator loss
+                loss_G = loss_G_GAN + loss_G_Pixel
                 loss_G.backward()
                 optimizer_G.step()
                 
                 g_losses.append(loss_G.item())
                 g_losses_gan.append(loss_G_GAN.item())
-                g_losses_l1.append(loss_G_L1.item())
+                g_losses_l1.append(loss_G_Pixel.item())
                 d_losses.append(loss_D.item())
                 
             mean_g_loss = np.mean(g_losses)
