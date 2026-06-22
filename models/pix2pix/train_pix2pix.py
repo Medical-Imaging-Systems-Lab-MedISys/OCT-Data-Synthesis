@@ -620,47 +620,50 @@ def main():
             mlflow.log_metric("g_loss_l1", mean_g_loss_l1, step=epoch)
             mlflow.log_metric("d_loss", mean_d_loss, step=epoch)
             
-            # Periodically save test visuals (inputs & outputs of generator & discriminator)
-            generator.eval()
-            discriminator.eval()
-            with torch.no_grad():
-                test_fakes = generator(test_synth_imgs)
+            # Periodically save test visuals to MLflow (every 25 epochs)
+            if (epoch + 1) % 25 == 0 or epoch == epochs - 1:
+                generator.eval()
+                discriminator.eval()
+                with torch.no_grad():
+                    test_fakes = generator(test_synth_imgs)
+                    
+                    # Discriminator output on real pair
+                    test_real_pair = torch.cat([test_synth_imgs, test_real_imgs], dim=1)
+                    test_pred_real_logits = discriminator(test_real_pair)
+                    test_pred_real_probs = torch.sigmoid(test_pred_real_logits)
+                    
+                    # Discriminator output on fake pair
+                    test_fake_pair = torch.cat([test_synth_imgs, test_fakes], dim=1)
+                    test_pred_fake_logits = discriminator(test_fake_pair)
+                    test_pred_fake_probs = torch.sigmoid(test_pred_fake_logits)
+                    
+                    # Resize patch-grid probability maps to original image size
+                    H, W = test_synth_imgs.shape[2], test_synth_imgs.shape[3]
+                    test_pred_real_resized = nn.functional.interpolate(
+                        test_pred_real_probs, size=(H, W), mode='bilinear', align_corners=False
+                    )
+                    test_pred_fake_resized = nn.functional.interpolate(
+                        test_pred_fake_probs, size=(H, W), mode='bilinear', align_corners=False
+                    )
                 
-                # Discriminator output on real pair
-                test_real_pair = torch.cat([test_synth_imgs, test_real_imgs], dim=1)
-                test_pred_real_logits = discriminator(test_real_pair)
-                test_pred_real_probs = torch.sigmoid(test_pred_real_logits)
+                test_synth_grid = vutils.make_grid(test_synth_imgs[:16], nrow=4, normalize=True)
+                test_fakes_grid = vutils.make_grid(test_fakes[:16], nrow=4, normalize=True)
+                test_disc_real_grid = vutils.make_grid(test_pred_real_resized[:16], nrow=4, normalize=False)
+                test_disc_fake_grid = vutils.make_grid(test_pred_fake_resized[:16], nrow=4, normalize=False)
                 
-                # Discriminator output on fake pair
-                test_fake_pair = torch.cat([test_synth_imgs, test_fakes], dim=1)
-                test_pred_fake_logits = discriminator(test_fake_pair)
-                test_pred_fake_probs = torch.sigmoid(test_pred_fake_logits)
+                mlflow.log_image(tensor_to_numpy(test_synth_grid), f"validation_priors_epoch_{epoch+1}.png")
+                mlflow.log_image(tensor_to_numpy(test_fakes_grid), f"validation_fakes_epoch_{epoch+1}.png")
+                mlflow.log_image(prob_tensor_to_numpy(test_disc_real_grid), f"validation_disc_prob_real_epoch_{epoch+1}.png")
+                mlflow.log_image(prob_tensor_to_numpy(test_disc_fake_grid), f"validation_disc_prob_fake_epoch_{epoch+1}.png")
                 
-                # Resize patch-grid probability maps to original image size
-                H, W = test_synth_imgs.shape[2], test_synth_imgs.shape[3]
-                test_pred_real_resized = nn.functional.interpolate(
-                    test_pred_real_probs, size=(H, W), mode='bilinear', align_corners=False
-                )
-                test_pred_fake_resized = nn.functional.interpolate(
-                    test_pred_fake_probs, size=(H, W), mode='bilinear', align_corners=False
-                )
-            
-            test_fakes_grid = vutils.make_grid(test_fakes[:16], nrow=4, normalize=True)
-            test_disc_real_grid = vutils.make_grid(test_pred_real_resized[:16], nrow=4, normalize=False)
-            test_disc_fake_grid = vutils.make_grid(test_pred_fake_resized[:16], nrow=4, normalize=False)
-            
-            mlflow.log_image(tensor_to_numpy(test_fakes_grid), f"validation_fakes_epoch_{epoch+1}.png")
-            mlflow.log_image(prob_tensor_to_numpy(test_disc_real_grid), f"validation_disc_prob_real_epoch_{epoch+1}.png")
-            mlflow.log_image(prob_tensor_to_numpy(test_disc_fake_grid), f"validation_disc_prob_fake_epoch_{epoch+1}.png")
-            
-            # Local visualization save & logging
-            if epoch % 10 == 0 or epoch == epochs - 1:
+                # Local visualization save
                 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-                axes[0].imshow(tensor_to_numpy(synth_grid[:16]))
+                axes[0].imshow(tensor_to_numpy(test_synth_grid))
                 axes[0].set_title("Synthetic Input (Speckled)")
                 axes[0].axis('off')
                 
-                axes[1].imshow(tensor_to_numpy(real_grid[:16]))
+                test_real_grid = vutils.make_grid(test_real_imgs[:16], nrow=4, normalize=True)
+                axes[1].imshow(tensor_to_numpy(test_real_grid))
                 axes[1].set_title("Real Target")
                 axes[1].axis('off')
                 
