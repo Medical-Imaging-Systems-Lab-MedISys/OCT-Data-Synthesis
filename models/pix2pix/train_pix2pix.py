@@ -433,11 +433,7 @@ def main():
     test_dataset = PairedOCTDataset(config['test_labels_path'], config['test_data_path'], config['img_size'], transform=transform)
     test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=4, pin_memory=True)
     
-    # Fixed validation inputs
-    test_batch = next(iter(test_loader))
-    test_synth_imgs, test_real_imgs = test_batch
-    test_synth_imgs = test_synth_imgs.to(device)
-    test_real_imgs = test_real_imgs.to(device)
+    # test_batch will now be dynamically sampled during the epoch loop
     
     # Network Initialization
     generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'], norm_layer=nn.InstanceNorm2d)
@@ -622,6 +618,12 @@ def main():
             
             # Periodically save test visuals to MLflow (every 25 epochs)
             if (epoch + 1) % 25 == 0 or epoch == epochs - 1:
+                # Dynamically sample and augment validation priors on-the-fly!
+                test_batch = next(iter(test_loader))
+                test_synth_imgs, test_real_imgs = test_batch
+                test_synth_imgs = test_synth_imgs.to(device)
+                test_real_imgs = test_real_imgs.to(device)
+                
                 generator.eval()
                 discriminator.eval()
                 with torch.no_grad():
