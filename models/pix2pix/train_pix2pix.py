@@ -540,12 +540,8 @@ def main():
             log_file.write(f"\n---\n\n## {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {run_name}\n")
             log_file.write(run_description + "\n")
         
-        # Save fixed visual setup
-        synth_grid = vutils.make_grid(test_synth_imgs, nrow=4, normalize=True)
-        real_grid = vutils.make_grid(test_real_imgs, nrow=4, normalize=True)
-        mlflow.log_image(tensor_to_numpy(synth_grid), "validation_synthetic_inputs.png")
-        mlflow.log_image(tensor_to_numpy(real_grid), "validation_real_targets.png")
-        
+        # (Initial static validation log removed; validation is now logged dynamically every 5 epochs)
+
         epochs = config['epochs']
         for epoch in range(epochs):
             print(f"Starting epoch {epoch + 1}/{epochs}...")
