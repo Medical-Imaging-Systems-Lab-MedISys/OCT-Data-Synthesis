@@ -616,8 +616,8 @@ def main():
             mlflow.log_metric("g_loss_l1", mean_g_loss_l1, step=epoch)
             mlflow.log_metric("d_loss", mean_d_loss, step=epoch)
             
-            # Periodically save test visuals to MLflow (every 25 epochs)
-            if (epoch + 1) % 25 == 0 or epoch == epochs - 1:
+            # Periodically save test visuals to MLflow (every 5 epochs)
+            if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
                 # Dynamically sample and augment validation priors on-the-fly!
                 test_batch = next(iter(test_loader))
                 test_synth_imgs, test_real_imgs = test_batch
