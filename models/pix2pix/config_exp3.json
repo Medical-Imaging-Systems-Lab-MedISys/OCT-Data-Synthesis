@@ -9,7 +9,7 @@
   "learning_rate": 0.00005,
   "beta1": 0.5,
   "lambda_L1": 100.0,
-  "experiment_name": "OCT_Synthesis_Pix2Pix_Exp3_SlowLR",
+  "experiment_name": "OCT_Synthesis_Pix2Pix_Exp3_SlowLR_Online",
   "mlflow_tracking_uri": "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow",
   "use_multi_gpu": false,
   "small_dataset_threshold": 50,
