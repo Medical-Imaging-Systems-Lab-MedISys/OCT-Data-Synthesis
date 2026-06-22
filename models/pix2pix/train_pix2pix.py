@@ -144,8 +144,8 @@ def prepare_synthetic_dataset(labels_path, synthetic_path, min_gamma=0.5, max_ga
 # =====================================================================
 
 class PairedOCTDataset(Dataset):
-    def __init__(self, synthetic_dir, real_dir, img_size, transform=None):
-        self.synthetic_dir = synthetic_dir
+    def __init__(self, labels_dir, real_dir, img_size, transform=None):
+        self.labels_dir = labels_dir
         self.real_dir = real_dir
         self.img_size = img_size
         self.transform = transform
@@ -154,30 +154,52 @@ class PairedOCTDataset(Dataset):
             f for f in os.listdir(real_dir)
             if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))
         ])
-        print(f"Dataset successfully paired: {len(self.filenames)} files found.")
+        print(f"Dataset pairing... Pre-loading {len(self.filenames)} files directly into RAM to avoid I/O bottlenecks...")
+        
+        self.real_images = []
+        self.masks = []
+        
+        for fname in self.filenames:
+            # 1. Load Real Image into RAM
+            real_path = os.path.join(self.real_dir, fname)
+            real_img = Image.open(real_path).convert('L')
+            
+            # Remove watermark dynamically in RAM
+            real_np = np.array(real_img)
+            clean_patch = real_np[350:, 600:]
+            real_np[350:, :150] = np.flip(clean_patch, axis=1)
+            real_img = Image.fromarray(real_np)
+            
+            # Resize and cache
+            real_img = real_img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            self.real_images.append(real_img)
+            
+            # 2. Load Real Anatomical Mask into RAM
+            lbl_path = os.path.join(self.labels_dir, fname)
+            mask_bgra = cv2.imread(lbl_path, cv2.IMREAD_UNCHANGED)
+            if mask_bgra is not None and len(mask_bgra.shape) == 3 and mask_bgra.shape[2] == 3:
+                alpha = np.full((mask_bgra.shape[0], mask_bgra.shape[1], 1), 255, dtype=np.uint8)
+                mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
+            self.masks.append(mask_bgra)
+            
+        print(f"RAM Pre-loading complete!")
 
     def __len__(self):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-        filename = self.filenames[idx]
-        synth_path = os.path.join(self.synthetic_dir, filename)
-        real_path = os.path.join(self.real_dir, filename)
+        # 1. Retrieve pre-loaded fast data from RAM
+        real_img = self.real_images[idx]
+        mask_bgra = self.masks[idx]
         
-        # Open in grayscale
-        synth_img = Image.open(synth_path).convert('L')
-        real_img = Image.open(real_path).convert('L')
+        # 2. Online Mathematical Augmentation! (Speckle noise changes every single epoch)
+        synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5)
         
-        # Remove watermark on the bottom-left corner by replacing it with a flipped clean patch from the bottom-right
-        real_np = np.array(real_img)
-        clean_patch = real_np[350:, 600:]
-        real_np[350:, :150] = np.flip(clean_patch, axis=1)
-        real_img = Image.fromarray(real_np)
-        
-        # Resize to specified training resolution
+        # 3. Convert generated numpy array to PIL and resize
+        synth_img = Image.fromarray(synth_np, mode='L')
         synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
-        real_img = real_img.resize((self.img_size, self.img_size), Image.BILINEAR)
         
+        # 4. Transform to tensors
         if self.transform:
             synth_img = self.transform(synth_img)
             real_img = self.transform(real_img)
@@ -396,25 +418,18 @@ def main():
     print(f"PyTorch version: {torch.__version__}")
     print(f"Device: {device}")
     
-    # Establish dataset directories
-    train_synth_dir = os.path.join(os.path.dirname(config['train_data_path']), 'train_synthetic')
-    test_synth_dir = os.path.join(os.path.dirname(config['test_data_path']), 'test_synthetic')
-    
-    # Prepare datasets (if not cached)
-    prepare_synthetic_dataset(config['train_labels_path'], train_synth_dir)
-    prepare_synthetic_dataset(config['test_labels_path'], test_synth_dir)
-    
     # Normalization and Dataset setup
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=(0.5,), std=(0.5,))
     ])
     
-    train_dataset = PairedOCTDataset(train_synth_dir, config['train_data_path'], config['img_size'], transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True)
+    # Initialize Datasets using Online Augmentation RAM Cache
+    train_dataset = PairedOCTDataset(config['train_labels_path'], config['train_data_path'], config['img_size'], transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True, num_workers=8, pin_memory=True)
     
-    test_dataset = PairedOCTDataset(test_synth_dir, config['test_data_path'], config['img_size'], transform=transform)
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+    test_dataset = PairedOCTDataset(config['test_labels_path'], config['test_data_path'], config['img_size'], transform=transform)
+    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=4, pin_memory=True)
     
     # Fixed validation inputs
     test_batch = next(iter(test_loader))
