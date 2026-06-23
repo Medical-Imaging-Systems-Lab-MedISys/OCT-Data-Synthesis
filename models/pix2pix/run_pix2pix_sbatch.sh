@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --nodelist=n1              # Target RTX Pro 6000 node n1
 #SBATCH --gres=gpu:1               # Request 1 GPU resource per array task
-#SBATCH --array=4,5,6                # Spawn 3 independent experiments to prevent DAGsHub 500 errors
+#SBATCH --array=7-9                # Spawn 3 independent experiments to prevent DAGsHub 500 errors
 #SBATCH --partition=normal
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/pix2pix_oct_%A_%a.out
