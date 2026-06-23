@@ -512,6 +512,9 @@ def main():
     
     with mlflow.start_run(run_name=run_name) as run:
         n_layers = config.get('n_layers_D', 3)
+        penalty_type = "L2" if "lambda_L2" in config else "L1"
+        penalty_value = config.get("lambda_L2", config.get("lambda_L1", "N/A"))
+        
         disc_desc = f"PatchGAN ({n_layers}-Layers, InstanceNorm + SpectralNorm)"
         
         run_description = (
@@ -520,7 +523,7 @@ def main():
             f"- **Resolution:** {config['img_size']}x{config['img_size']}\n"
             f"- **Batch Size:** {config['batch_size']}\n"
             f"- **Epochs:** {config['epochs']}\n"
-            f"- **L1 Lambda:** {config['lambda_L1']}\n"
+            f"- **{penalty_type} Lambda:** {penalty_value}\n"
             f"- **Generator:** U-Net (InstanceNorm2d)\n"
             f"- **Discriminator:** {disc_desc}"
         )
@@ -528,7 +531,7 @@ def main():
         mlflow.set_tag("Resolution", f"{config['img_size']}x{config['img_size']}")
         mlflow.set_tag("Generator", "U-Net-InstanceNorm")
         mlflow.set_tag("Discriminator", disc_desc)
-        mlflow.set_tag("L1_Lambda", str(config['lambda_L1']))
+        mlflow.set_tag(f"{penalty_type}_Lambda", str(penalty_value))
         
         mlflow.log_params(config)
         mlflow.log_artifact(args.config)
