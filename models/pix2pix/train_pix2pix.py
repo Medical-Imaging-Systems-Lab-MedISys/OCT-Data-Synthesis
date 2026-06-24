@@ -106,7 +106,7 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensi
     additive = np.random.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
-    final_img[is_bg] = np.clip(final_img[is_bg], 0, 100.0)
+    final_img[is_bg] = np.clip(final_img[is_bg], 0, 90.0)
     
     final_img = np.clip(final_img, 0, 255).astype(np.uint8)
     
