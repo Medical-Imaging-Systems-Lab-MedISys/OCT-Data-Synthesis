@@ -624,60 +624,14 @@ def main():
                 test_real_imgs = test_real_imgs.to(device)
                 
                 generator.eval()
-                discriminator.eval()
                 with torch.no_grad():
                     test_fakes = generator(test_synth_imgs)
-                    
-                    # Discriminator output on real pair
-                    test_real_pair = torch.cat([test_synth_imgs, test_real_imgs], dim=1)
-                    test_pred_real_logits = discriminator(test_real_pair)
-                    test_pred_real_probs = torch.sigmoid(test_pred_real_logits)
-                    
-                    # Discriminator output on fake pair
-                    test_fake_pair = torch.cat([test_synth_imgs, test_fakes], dim=1)
-                    test_pred_fake_logits = discriminator(test_fake_pair)
-                    test_pred_fake_probs = torch.sigmoid(test_pred_fake_logits)
-                    
-                    # Resize patch-grid probability maps to original image size
-                    H, W = test_synth_imgs.shape[2], test_synth_imgs.shape[3]
-                    test_pred_real_resized = nn.functional.interpolate(
-                        test_pred_real_probs, size=(H, W), mode='bilinear', align_corners=False
-                    )
-                    test_pred_fake_resized = nn.functional.interpolate(
-                        test_pred_fake_probs, size=(H, W), mode='bilinear', align_corners=False
-                    )
                 
-                test_synth_grid = vutils.make_grid(test_synth_imgs[:16], nrow=4, normalize=True)
-                test_fakes_grid = vutils.make_grid(test_fakes[:16], nrow=4, normalize=True)
-                test_disc_real_grid = vutils.make_grid(test_pred_real_resized[:16], nrow=4, normalize=False)
-                test_disc_fake_grid = vutils.make_grid(test_pred_fake_resized[:16], nrow=4, normalize=False)
-                
-                mlflow.log_image(tensor_to_numpy(test_synth_grid), f"validation_priors_epoch_{epoch+1}.png")
-                mlflow.log_image(tensor_to_numpy(test_fakes_grid), f"validation_fakes_epoch_{epoch+1}.png")
-                mlflow.log_image(prob_tensor_to_numpy(test_disc_real_grid), f"validation_disc_prob_real_epoch_{epoch+1}.png")
-                mlflow.log_image(prob_tensor_to_numpy(test_disc_fake_grid), f"validation_disc_prob_fake_epoch_{epoch+1}.png")
-                
-                # Local visualization save
-                fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-                axes[0].imshow(tensor_to_numpy(test_synth_grid))
-                axes[0].set_title("Synthetic Input (Speckled)")
-                axes[0].axis('off')
-                
-                test_real_grid = vutils.make_grid(test_real_imgs[:16], nrow=4, normalize=True)
-                axes[1].imshow(tensor_to_numpy(test_real_grid))
-                axes[1].set_title("Real Target")
-                axes[1].axis('off')
-                
-                axes[2].imshow(tensor_to_numpy(test_fakes_grid))
-                axes[2].set_title("Generated Fake")
-                axes[2].axis('off')
-                
-                plt.tight_layout()
-                fig_path = f"sample_epoch_{epoch+1}.png"
-                plt.savefig(fig_path)
-                plt.close(fig)
-                if os.path.exists(fig_path):
-                    os.remove(fig_path)
+                # Log exactly 3 comparison image grid files (each with prior, synthetic fake, real ground truth side by side)
+                for i in range(min(3, len(test_synth_imgs))):
+                    grid_tensors = [test_synth_imgs[i], test_fakes[i], test_real_imgs[i]]
+                    grid = vutils.make_grid(grid_tensors, nrow=3, normalize=True)
+                    mlflow.log_image(tensor_to_numpy(grid), f"validation_grid_{i+1}_epoch_{epoch+1}.png")
                     
         # Log models at the end of the run
         gen_to_log = generator.module if isinstance(generator, nn.DataParallel) else generator
