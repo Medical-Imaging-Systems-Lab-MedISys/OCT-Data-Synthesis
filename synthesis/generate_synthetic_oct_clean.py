@@ -6,14 +6,14 @@ import cv2
 
 # Baseline layer parameters (fitted from NR206)
 LAYERS_CFG = [
-    { 'name': 'Red',         'a': 0.000163,  'b': -0.1227, 'c': 137.8, 'd': 34.7, 'w': 43.5,  'meanInt': 200.0, 'color': [0, 0, 255, 255] },     # BGRA Red
-    { 'name': 'Olive',       'a': 0.000130,  'b': -0.1091, 'c': 153.8, 'd': 19.2, 'w': 41.8,  'meanInt': 130.0, 'color': [0, 128, 128, 255] }, # BGRA Olive
-    { 'name': 'Yellow',      'a': 0.000070,  'b': -0.0702, 'c': 166.3, 'd': 2.1,  'w': 10.9,  'meanInt': 180.0, 'color': [0, 255, 255, 255] }, # BGRA Yellow
-    { 'name': 'DarkGreen',   'a': 0.000042,  'b': -0.0491, 'c': 171.6, 'd': -7.3, 'w': 40.5,  'meanInt': 110.0, 'color': [0, 128, 0, 255] },   # BGRA Dark Green
-    { 'name': 'BrightGreen', 'a': -0.000000, 'b': -0.0200, 'c': 179.8, 'd': -7.5, 'w': 34.7,  'meanInt': 60.0,  'color': [0, 255, 0, 255] },   # BGRA Bright Green
-    { 'name': 'Cyan',        'a': -0.000033, 'b': 0.0014,  'c': 189.1, 'd': -3.4, 'w': 26.6,  'meanInt': 140.0, 'color': [255, 255, 0, 255] }, # BGRA Cyan
-    { 'name': 'Blue',        'a': -0.000039, 'b': 0.0054,  'c': 194.0, 'd': -3.2, 'w': 29.4,  'meanInt': 245.0, 'color': [255, 0, 0, 255] },   # BGRA Blue
-    { 'name': 'Magenta',     'a': -0.000042, 'b': 0.0070,  'c': 201.4, 'd': -1.1, 'w': 18.2,  'meanInt': 80.0,  'color': [255, 0, 255, 255] }  # BGRA Magenta
+    { 'name': 'Red',         'a': 0.000163,  'b': -0.1227, 'c': 137.8, 'd': 34.7, 'w': 43.5,  'meanInt': 165.5, 'color': [0, 0, 255, 255] },     # BGRA Red
+    { 'name': 'Olive',       'a': 0.000130,  'b': -0.1091, 'c': 153.8, 'd': 19.2, 'w': 41.8,  'meanInt': 129.1, 'color': [0, 128, 128, 255] }, # BGRA Olive
+    { 'name': 'Yellow',      'a': 0.000070,  'b': -0.0702, 'c': 166.3, 'd': 2.1,  'w': 10.9,  'meanInt': 107.4, 'color': [0, 255, 255, 255] }, # BGRA Yellow
+    { 'name': 'DarkGreen',   'a': 0.000042,  'b': -0.0491, 'c': 171.6, 'd': -7.3, 'w': 40.5,  'meanInt': 123.3, 'color': [0, 128, 0, 255] },   # BGRA Dark Green
+    { 'name': 'BrightGreen', 'a': -0.000000, 'b': -0.0200, 'c': 179.8, 'd': -7.5, 'w': 34.7,  'meanInt': 85.9,  'color': [0, 255, 0, 255] },   # BGRA Bright Green
+    { 'name': 'Cyan',        'a': -0.000033, 'b': 0.0014,  'c': 189.1, 'd': -3.4, 'w': 26.6,  'meanInt': 99.7, 'color': [255, 255, 0, 255] }, # BGRA Cyan
+    { 'name': 'Blue',        'a': -0.000039, 'b': 0.0054,  'c': 194.0, 'd': -3.2, 'w': 29.4,  'meanInt': 196.8, 'color': [255, 0, 0, 255] },   # BGRA Blue
+    { 'name': 'Magenta',     'a': -0.000042, 'b': 0.0070,  'c': 201.4, 'd': -1.1, 'w': 18.2,  'meanInt': 193.0,  'color': [255, 0, 255, 255] }  # BGRA Magenta
 ]
 
 def sample_gamma_from_bell_curve(min_g, max_g):

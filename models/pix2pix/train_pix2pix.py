@@ -44,14 +44,14 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5):
     
     # Baseline layer parameters (fitted from NR206)
     LAYERS_CFG = [
-        { 'name': 'Red',         'meanInt': 200.0, 'color': [0, 0, 255] },     # BGR Red
-        { 'name': 'Olive',       'meanInt': 130.0, 'color': [0, 128, 128] },   # BGR Olive
-        { 'name': 'Yellow',      'meanInt': 180.0, 'color': [0, 255, 255] },   # BGR Yellow
-        { 'name': 'DarkGreen',   'meanInt': 110.0, 'color': [0, 128, 0] },     # BGR Dark Green
-        { 'name': 'BrightGreen', 'meanInt': 60.0,  'color': [0, 255, 0] },     # BGR Bright Green
-        { 'name': 'Cyan',        'meanInt': 140.0, 'color': [255, 255, 0] },   # BGR Cyan
-        { 'name': 'Blue',        'meanInt': 245.0, 'color': [255, 0, 0] },     # BGR Blue
-        { 'name': 'Magenta',     'meanInt': 80.0,  'color': [255, 0, 255] }    # BGR Magenta
+        { 'name': 'Red',         'meanInt': 165.5, 'color': [0, 0, 255] },     # BGR Red
+        { 'name': 'Olive',       'meanInt': 129.1, 'color': [0, 128, 128] },   # BGR Olive
+        { 'name': 'Yellow',      'meanInt': 107.4, 'color': [0, 255, 255] },   # BGR Yellow
+        { 'name': 'DarkGreen',   'meanInt': 123.3, 'color': [0, 128, 0] },     # BGR Dark Green
+        { 'name': 'BrightGreen', 'meanInt': 85.9,  'color': [0, 255, 0] },     # BGR Bright Green
+        { 'name': 'Cyan',        'meanInt': 99.7, 'color': [255, 255, 0] },   # BGR Cyan
+        { 'name': 'Blue',        'meanInt': 196.8, 'color': [255, 0, 0] },     # BGR Blue
+        { 'name': 'Magenta',     'meanInt': 193.0,  'color': [255, 0, 255] }    # BGR Magenta
     ]
     
     layer_gammas = [sample_gamma_from_bell_curve(min_gamma, max_gamma) for _ in range(8)]
