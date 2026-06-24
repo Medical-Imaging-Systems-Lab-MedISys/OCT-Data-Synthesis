@@ -49,9 +49,9 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
         { 'name': 'Yellow',      'meanInt': 108.6, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255] },   # BGR Yellow
         { 'name': 'DarkGreen',   'meanInt': 133.8, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0] },     # BGR Dark Green
         { 'name': 'BrightGreen', 'meanInt': 75.0,  'min_g': 0.95, 'max_g': 1.05, 'color': [0, 255, 0] },     # BGR Bright Green
-        { 'name': 'Cyan',        'meanInt': 166.8, 'min_g': 0.90, 'max_g': 1.10, 'color': [255, 255, 0] },   # BGR Cyan
+        { 'name': 'Cyan',        'meanInt': 210.0, 'min_g': 0.90, 'max_g': 1.10, 'color': [255, 255, 0] },   # BGR Cyan
         { 'name': 'Blue',        'meanInt': 137.5, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0] },     # BGR Blue
-        { 'name': 'Magenta',     'meanInt': 160.6, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }    # BGR Magenta
+        { 'name': 'Magenta',     'meanInt': 210.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }    # BGR Magenta
     ]
     
     if custom_intensities is not None:
@@ -202,9 +202,9 @@ class PairedOCTDataset(Dataset):
             'Yellow': 108.6,
             'DarkGreen': 133.8,
             'BrightGreen': 75.0,
-            'Cyan': 166.8,
+            'Cyan': 210.0,
             'Blue': 137.5,
-            'Magenta': 160.6
+            'Magenta': 210.0
         }
         
         # Scaling ratios based on NORMAL1.png tuning relative to real profiled NORMAL1.png values:
@@ -215,9 +215,9 @@ class PairedOCTDataset(Dataset):
             'Yellow': 122.0 / 120.62,
             'DarkGreen': 149.0 / 137.30,
             'BrightGreen': 86.0 / 98.55,
-            'Cyan': 193.0 / 115.35,
+            'Cyan': 230.0 / 115.35,
             'Blue': 130.0 / 222.17,
-            'Magenta': 172.0 / 206.72
+            'Magenta': 230.0 / 206.72
         }
         
         self.real_images = []
