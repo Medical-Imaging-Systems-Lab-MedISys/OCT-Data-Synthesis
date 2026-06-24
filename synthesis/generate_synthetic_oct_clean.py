@@ -12,7 +12,7 @@ LAYERS_CFG = [
     { 'name': 'DarkGreen',   'a': 0.000042,  'b': -0.0491, 'c': 171.6, 'd': -7.3, 'w': 40.5,  'meanInt': 123.3, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0, 255] },   # BGRA Dark Green
     { 'name': 'BrightGreen', 'a': -0.000000, 'b': -0.0200, 'c': 179.8, 'd': -7.5, 'w': 34.7,  'meanInt': 85.9, 'min_g': 0.95, 'max_g': 1.05,  'color': [0, 255, 0, 255] },   # BGRA Bright Green
     { 'name': 'Cyan',        'a': -0.000033, 'b': 0.0014,  'c': 189.1, 'd': -3.4, 'w': 26.6,  'meanInt': 99.7, 'min_g': 0.90, 'max_g': 1.10, 'color': [255, 255, 0, 255] }, # BGRA Cyan
-    { 'name': 'Blue',        'a': -0.000039, 'b': 0.0054,  'c': 194.0, 'd': -3.2, 'w': 29.4,  'meanInt': 196.8, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0, 255] },   # BGRA Blue
+    { 'name': 'Blue',        'a': -0.000039, 'b': 0.0054,  'c': 194.0, 'd': -3.2, 'w': 29.4,  'meanInt': 235.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0, 255] },   # BGRA Blue
     { 'name': 'Magenta',     'a': -0.000042, 'b': 0.0070,  'c': 201.4, 'd': -1.1, 'w': 18.2,  'meanInt': 193.0, 'min_g': 0.85, 'max_g': 1.15,  'color': [255, 0, 255, 255] }  # BGRA Magenta
 ]
 
@@ -69,7 +69,7 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     t5 = (11.0 + 17.0 * np.exp(-np.pow(x_indices - fovea_x, 2) / (2 * np.pow(70, 2)))) * thickness_scale
     
     t6 = np.full(width, 8.0) * thickness_scale
-    t7 = np.full(width, 3.0) * thickness_scale
+    t7 = np.full(width, 5.0) * thickness_scale
     
     t8 = (12.0 + 2.0 * np.exp(-np.pow(x_indices - fovea_x, 2) / (2 * np.pow(150, 2)))) * thickness_scale
 

@@ -50,7 +50,7 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensi
         { 'name': 'DarkGreen',   'meanInt': 123.3, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0] },     # BGR Dark Green
         { 'name': 'BrightGreen', 'meanInt': 85.9, 'min_g': 0.95, 'max_g': 1.05,  'color': [0, 255, 0] },     # BGR Bright Green
         { 'name': 'Cyan',        'meanInt': 99.7, 'min_g': 0.90, 'max_g': 1.10,  'color': [255, 255, 0] },   # BGR Cyan
-        { 'name': 'Blue',        'meanInt': 196.8, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0] },     # BGR Blue
+        { 'name': 'Blue',        'meanInt': 235.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0] },     # BGR Blue
         { 'name': 'Magenta',     'meanInt': 193.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }    # BGR Magenta
     ]
     
@@ -193,10 +193,23 @@ class PairedOCTDataset(Dataset):
             f for f in os.listdir(real_dir)
             if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))
         ])
-        print(f"Dataset pairing... Pre-loading {len(self.filenames)} files directly into RAM to avoid I/O bottlenecks...")
+        print(f"Dataset pairing... Pre-loading {len(self.filenames)} files directly into RAM and profiling layer intensities...")
+        
+        # Initialize default intensities for fallback
+        global_defaults = {
+            'Red': 165.5,
+            'Olive': 129.1,
+            'Yellow': 107.4,
+            'DarkGreen': 123.3,
+            'BrightGreen': 85.9,
+            'Cyan': 99.7,
+            'Blue': 235.0,
+            'Magenta': 193.0
+        }
         
         self.real_images = []
         self.masks = []
+        self.image_intensities = []
         
         for fname in self.filenames:
             # 1. Load Real Image into RAM
@@ -207,11 +220,6 @@ class PairedOCTDataset(Dataset):
             real_np = np.array(real_img)
             clean_patch = real_np[350:, 600:]
             real_np[350:, :150] = np.flip(clean_patch, axis=1)
-            real_img = Image.fromarray(real_np)
-            
-            # Resize and cache
-            real_img = real_img.resize((self.img_size, self.img_size), Image.BILINEAR)
-            self.real_images.append(real_img)
             
             # 2. Load Real Anatomical Mask into RAM
             lbl_path = os.path.join(self.labels_dir, fname)
@@ -221,28 +229,15 @@ class PairedOCTDataset(Dataset):
                 mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
             self.masks.append(mask_bgra)
             
-        print(f"RAM Pre-loading complete! Profiling individual image layer intensities...")
-        
-        # Initialize default intensities for fallback
-        global_defaults = {
-            'Red': 165.5,
-            'Olive': 129.1,
-            'Yellow': 107.4,
-            'DarkGreen': 123.3,
-            'BrightGreen': 85.9,
-            'Cyan': 99.7,
-            'Blue': 196.8,
-            'Magenta': 193.0
-        }
-        
-        self.image_intensities = []
-        for i in range(len(self.filenames)):
-            real_img = self.real_images[i]
-            mask_bgra = self.masks[i]
-            img_intensities = profile_single_image_intensities(real_img, mask_bgra, global_defaults)
+            # 3. Profile intensities on full resolution (avoiding dimension mismatch)
+            img_intensities = profile_single_image_intensities(real_np, mask_bgra, global_defaults)
             self.image_intensities.append(img_intensities)
             
-        print(f"Dataset profiling complete!")
+            # 4. Resize real image and cache
+            real_img_resized = Image.fromarray(real_np).resize((self.img_size, self.img_size), Image.BILINEAR)
+            self.real_images.append(real_img_resized)
+            
+        print(f"RAM Pre-loading and profiling complete!")
 
     def __len__(self):
         return len(self.filenames)
