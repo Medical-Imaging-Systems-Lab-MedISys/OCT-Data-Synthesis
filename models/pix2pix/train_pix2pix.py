@@ -34,7 +34,7 @@ def sample_gamma_from_bell_curve(min_g, max_g):
 def apply_gamma(val, g):
     return 255.0 * np.power(val / 255.0, g)
 
-def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=None):
+def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensities=None):
     """
     Synthesizes a realistic-looking synthetic OCT image (with speckle noise)
     directly from a BGRA layer segmentation mask.

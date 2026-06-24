@@ -134,7 +134,7 @@ def main():
     parser = argparse.ArgumentParser(description="Batch Generate Synthetic OCT Images and Labels")
     parser.add_argument("--count", type=int, default=10, help="Number of images to generate")
     parser.add_argument("--min-gamma", type=float, default=0.5, help="Minimum gamma value")
-    parser.add_argument("--max-gamma", type=float, default=1.5, help="Maximum gamma value")
+    parser.add_argument("--max-gamma", type=float, default=1.2, help="Maximum gamma value")
     parser.add_argument("--output-dir", type=str, default="synthetic_dataset", help="Output root directory")
     
     args = parser.parse_args()
