@@ -6,14 +6,14 @@ import cv2
 
 # Baseline layer parameters (fitted from NR206)
 LAYERS_CFG = [
-    { 'name': 'Red',         'a': 0.000163,  'b': -0.1227, 'c': 137.8, 'd': 34.7, 'w': 43.5,  'meanInt': 165.5, 'color': [0, 0, 255, 255] },     # BGRA Red
-    { 'name': 'Olive',       'a': 0.000130,  'b': -0.1091, 'c': 153.8, 'd': 19.2, 'w': 41.8,  'meanInt': 129.1, 'color': [0, 128, 128, 255] }, # BGRA Olive
-    { 'name': 'Yellow',      'a': 0.000070,  'b': -0.0702, 'c': 166.3, 'd': 2.1,  'w': 10.9,  'meanInt': 107.4, 'color': [0, 255, 255, 255] }, # BGRA Yellow
-    { 'name': 'DarkGreen',   'a': 0.000042,  'b': -0.0491, 'c': 171.6, 'd': -7.3, 'w': 40.5,  'meanInt': 123.3, 'color': [0, 128, 0, 255] },   # BGRA Dark Green
-    { 'name': 'BrightGreen', 'a': -0.000000, 'b': -0.0200, 'c': 179.8, 'd': -7.5, 'w': 34.7,  'meanInt': 85.9,  'color': [0, 255, 0, 255] },   # BGRA Bright Green
-    { 'name': 'Cyan',        'a': -0.000033, 'b': 0.0014,  'c': 189.1, 'd': -3.4, 'w': 26.6,  'meanInt': 99.7, 'color': [255, 255, 0, 255] }, # BGRA Cyan
-    { 'name': 'Blue',        'a': -0.000039, 'b': 0.0054,  'c': 194.0, 'd': -3.2, 'w': 29.4,  'meanInt': 196.8, 'color': [255, 0, 0, 255] },   # BGRA Blue
-    { 'name': 'Magenta',     'a': -0.000042, 'b': 0.0070,  'c': 201.4, 'd': -1.1, 'w': 18.2,  'meanInt': 193.0,  'color': [255, 0, 255, 255] }  # BGRA Magenta
+    { 'name': 'Red',         'a': 0.000163,  'b': -0.1227, 'c': 137.8, 'd': 34.7, 'w': 43.5,  'meanInt': 165.5, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255, 255] },     # BGRA Red
+    { 'name': 'Olive',       'a': 0.000130,  'b': -0.1091, 'c': 153.8, 'd': 19.2, 'w': 41.8,  'meanInt': 129.1, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 128, 255] }, # BGRA Olive
+    { 'name': 'Yellow',      'a': 0.000070,  'b': -0.0702, 'c': 166.3, 'd': 2.1,  'w': 10.9,  'meanInt': 107.4, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255, 255] }, # BGRA Yellow
+    { 'name': 'DarkGreen',   'a': 0.000042,  'b': -0.0491, 'c': 171.6, 'd': -7.3, 'w': 40.5,  'meanInt': 123.3, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0, 255] },   # BGRA Dark Green
+    { 'name': 'BrightGreen', 'a': -0.000000, 'b': -0.0200, 'c': 179.8, 'd': -7.5, 'w': 34.7,  'meanInt': 85.9, 'min_g': 0.95, 'max_g': 1.05,  'color': [0, 255, 0, 255] },   # BGRA Bright Green
+    { 'name': 'Cyan',        'a': -0.000033, 'b': 0.0014,  'c': 189.1, 'd': -3.4, 'w': 26.6,  'meanInt': 99.7, 'min_g': 0.90, 'max_g': 1.10, 'color': [255, 255, 0, 255] }, # BGRA Cyan
+    { 'name': 'Blue',        'a': -0.000039, 'b': 0.0054,  'c': 194.0, 'd': -3.2, 'w': 29.4,  'meanInt': 196.8, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0, 255] },   # BGRA Blue
+    { 'name': 'Magenta',     'a': -0.000042, 'b': 0.0070,  'c': 201.4, 'd': -1.1, 'w': 18.2,  'meanInt': 193.0, 'min_g': 0.85, 'max_g': 1.15,  'color': [255, 0, 255, 255] }  # BGRA Magenta
 ]
 
 def sample_gamma_from_bell_curve(min_g, max_g):
@@ -40,7 +40,7 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     thickness_scale = np.random.uniform(0.95, 1.1)
 
     # 2. Randomize gamma parameters for layer-to-layer variance
-    layer_gammas = [sample_gamma_from_bell_curve(min_gamma, max_gamma) for _ in range(8)]
+    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g']) for cfg in LAYERS_CFG]
     bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
 
     # Pre-calculate layer boundaries for each x coordinate
@@ -97,7 +97,7 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     # 3. Vectorized rendering of layers
     # Vitreous humor (top background) - Set to pure black
     vitreous_mask = y_coords < b0
-    raw_img[vitreous_mask] = 0.0
+    raw_img[vitreous_mask] = 48.0
     label_mask[vitreous_mask] = [0, 0, 0, 255] # Black
 
     # Iterate through 8 layers
@@ -111,7 +111,7 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
 
     # Sclera / deep background - Set to pure black
     sclera_mask = y_coords >= b8
-    raw_img[sclera_mask] = 0.0
+    raw_img[sclera_mask] = 48.0
     label_mask[sclera_mask] = [0, 0, 0, 255] # Black
 
     # 4. No Speckle Noise - simply clamp and convert to uint8

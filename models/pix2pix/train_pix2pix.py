@@ -44,14 +44,14 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensi
     
     # Baseline layer parameters (fitted from NR206)
     LAYERS_CFG = [
-        { 'name': 'Red',         'meanInt': 165.5, 'color': [0, 0, 255] },     # BGR Red
-        { 'name': 'Olive',       'meanInt': 129.1, 'color': [0, 128, 128] },   # BGR Olive
-        { 'name': 'Yellow',      'meanInt': 107.4, 'color': [0, 255, 255] },   # BGR Yellow
-        { 'name': 'DarkGreen',   'meanInt': 123.3, 'color': [0, 128, 0] },     # BGR Dark Green
-        { 'name': 'BrightGreen', 'meanInt': 85.9,  'color': [0, 255, 0] },     # BGR Bright Green
-        { 'name': 'Cyan',        'meanInt': 99.7,  'color': [255, 255, 0] },   # BGR Cyan
-        { 'name': 'Blue',        'meanInt': 196.8, 'color': [255, 0, 0] },     # BGR Blue
-        { 'name': 'Magenta',     'meanInt': 193.0, 'color': [255, 0, 255] }    # BGR Magenta
+        { 'name': 'Red',         'meanInt': 165.5, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255] },     # BGR Red
+        { 'name': 'Olive',       'meanInt': 129.1, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 128] },   # BGR Olive
+        { 'name': 'Yellow',      'meanInt': 107.4, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255] },   # BGR Yellow
+        { 'name': 'DarkGreen',   'meanInt': 123.3, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0] },     # BGR Dark Green
+        { 'name': 'BrightGreen', 'meanInt': 85.9, 'min_g': 0.95, 'max_g': 1.05,  'color': [0, 255, 0] },     # BGR Bright Green
+        { 'name': 'Cyan',        'meanInt': 99.7, 'min_g': 0.90, 'max_g': 1.10,  'color': [255, 255, 0] },   # BGR Cyan
+        { 'name': 'Blue',        'meanInt': 196.8, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0] },     # BGR Blue
+        { 'name': 'Magenta',     'meanInt': 193.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }    # BGR Magenta
     ]
     
     if custom_intensities is not None:
@@ -60,7 +60,7 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensi
             if name in custom_intensities:
                 cfg['meanInt'] = custom_intensities[name]
     
-    layer_gammas = [sample_gamma_from_bell_curve(min_gamma, max_gamma) for _ in range(8)]
+    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g']) for cfg in LAYERS_CFG]
     bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
     
     # Organic micro-texture along columns
@@ -93,12 +93,12 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensi
     # Sclera / deep background (decays quickly back to dark background)
     sclera_mask = is_bg & (y_coords >= b8[None, :])
     dist_from_b8 = y_coords - b8[None, :]
-    sclera_intensity = 10.0 + 20.0 * np.exp(-dist_from_b8 / 25.0)
+    sclera_intensity = 60.0 + 20.0 * np.exp(-dist_from_b8 / 25.0)
     raw_img[sclera_mask] = apply_gamma(sclera_intensity, bg_gamma)[sclera_mask]
     
     # Vitreous humor background (above retina)
     vitreous_mask = is_bg & (y_coords < b8[None, :])
-    vitreous_intensity = np.full((height, width), 10.0, dtype=np.float32)
+    vitreous_intensity = np.full((height, width), 60.0, dtype=np.float32)
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
     # Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
