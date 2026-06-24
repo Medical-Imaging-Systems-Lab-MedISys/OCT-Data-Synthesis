@@ -123,6 +123,9 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     additive = np.random.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
+    is_bg = vitreous_mask | sclera_mask
+    final_img[is_bg] = np.clip(final_img[is_bg], 0, 100.0)
+    
     final_img = np.clip(final_img, 0, 255).astype(np.uint8)
 
     return final_img, label_mask
