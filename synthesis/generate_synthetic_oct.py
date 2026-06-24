@@ -119,7 +119,7 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     label_mask[sclera_mask] = [0, 0, 0, 255] # Black
 
     # 4. Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = np.random.uniform(0.35, 1.25, size=(height, width))
+    speckle = np.random.uniform(0.3, 1.2, size=(height, width))
     additive = np.random.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
