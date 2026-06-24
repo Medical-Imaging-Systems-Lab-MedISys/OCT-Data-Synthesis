@@ -34,7 +34,7 @@ def sample_gamma_from_bell_curve(min_g, max_g):
 def apply_gamma(val, g):
     return 255.0 * np.power(val / 255.0, g)
 
-def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5):
+def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=None):
     """
     Synthesizes a realistic-looking synthetic OCT image (with speckle noise)
     directly from a BGRA layer segmentation mask.
@@ -49,10 +49,16 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5):
         { 'name': 'Yellow',      'meanInt': 107.4, 'color': [0, 255, 255] },   # BGR Yellow
         { 'name': 'DarkGreen',   'meanInt': 123.3, 'color': [0, 128, 0] },     # BGR Dark Green
         { 'name': 'BrightGreen', 'meanInt': 85.9,  'color': [0, 255, 0] },     # BGR Bright Green
-        { 'name': 'Cyan',        'meanInt': 99.7, 'color': [255, 255, 0] },   # BGR Cyan
+        { 'name': 'Cyan',        'meanInt': 99.7,  'color': [255, 255, 0] },   # BGR Cyan
         { 'name': 'Blue',        'meanInt': 196.8, 'color': [255, 0, 0] },     # BGR Blue
-        { 'name': 'Magenta',     'meanInt': 193.0,  'color': [255, 0, 255] }    # BGR Magenta
+        { 'name': 'Magenta',     'meanInt': 193.0, 'color': [255, 0, 255] }    # BGR Magenta
     ]
+    
+    if custom_intensities is not None:
+        for cfg in LAYERS_CFG:
+            name = cfg['name']
+            if name in custom_intensities:
+                cfg['meanInt'] = custom_intensities[name]
     
     layer_gammas = [sample_gamma_from_bell_curve(min_gamma, max_gamma) for _ in range(8)]
     bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
@@ -143,6 +149,37 @@ def prepare_synthetic_dataset(labels_path, synthetic_path, min_gamma=0.5, max_ga
 # 2. PyTorch Paired Dataset
 # =====================================================================
 
+def profile_single_image_intensities(real_img, mask_bgra, global_defaults):
+    """
+    Profiles the mean intensity of each layer present in the mask_bgra
+    for a specific real_img. Returns a dict mapping layer name to mean intensity.
+    """
+    real_np = np.array(real_img)
+    intensities = {}
+    
+    LAYERS_CFG = [
+        { 'name': 'Red',         'color': [0, 0, 255] },
+        { 'name': 'Olive',       'color': [0, 128, 128] },
+        { 'name': 'Yellow',      'color': [0, 255, 255] },
+        { 'name': 'DarkGreen',   'color': [0, 128, 0] },
+        { 'name': 'BrightGreen', 'color': [0, 255, 0] },
+        { 'name': 'Cyan',        'color': [255, 255, 0] },
+        { 'name': 'Blue',        'color': [255, 0, 0] },
+        { 'name': 'Magenta',     'color': [255, 0, 255] }
+    ]
+    
+    for cfg in LAYERS_CFG:
+        name = cfg['name']
+        color = cfg['color']
+        layer_mask = (mask_bgra[:, :, 0] == color[0]) & (mask_bgra[:, :, 1] == color[1]) & (mask_bgra[:, :, 2] == color[2])
+        matching_pixels = real_np[layer_mask]
+        if len(matching_pixels) > 0:
+            intensities[name] = float(np.mean(matching_pixels))
+        else:
+            intensities[name] = global_defaults[name]
+            
+    return intensities
+
 class PairedOCTDataset(Dataset):
     def __init__(self, labels_dir, real_dir, img_size, transform=None):
         self.labels_dir = labels_dir
@@ -182,7 +219,28 @@ class PairedOCTDataset(Dataset):
                 mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
             self.masks.append(mask_bgra)
             
-        print(f"RAM Pre-loading complete!")
+        print(f"RAM Pre-loading complete! Profiling individual image layer intensities...")
+        
+        # Initialize default intensities for fallback
+        global_defaults = {
+            'Red': 165.5,
+            'Olive': 129.1,
+            'Yellow': 107.4,
+            'DarkGreen': 123.3,
+            'BrightGreen': 85.9,
+            'Cyan': 99.7,
+            'Blue': 196.8,
+            'Magenta': 193.0
+        }
+        
+        self.image_intensities = []
+        for i in range(len(self.filenames)):
+            real_img = self.real_images[i]
+            mask_bgra = self.masks[i]
+            img_intensities = profile_single_image_intensities(real_img, mask_bgra, global_defaults)
+            self.image_intensities.append(img_intensities)
+            
+        print(f"Dataset profiling complete!")
 
     def __len__(self):
         return len(self.filenames)
@@ -191,9 +249,10 @@ class PairedOCTDataset(Dataset):
         # 1. Retrieve pre-loaded fast data from RAM
         real_img = self.real_images[idx]
         mask_bgra = self.masks[idx]
+        custom_intensities = self.image_intensities[idx]
         
         # 2. Online Mathematical Augmentation! (Speckle noise changes every single epoch)
-        synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5)
+        synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=custom_intensities)
         
         # 3. Convert generated numpy array to PIL and resize
         synth_img = Image.fromarray(synth_np, mode='L')
