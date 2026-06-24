@@ -6,7 +6,7 @@ import cv2
 
 # Baseline layer parameters (fitted from NR206)
 LAYERS_CFG = [
-    { 'name': 'Red',         'a': 0.000163,  'b': -0.1227, 'c': 137.8, 'd': 34.7, 'w': 43.5,  'meanInt': 206.4, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255, 255] },     # BGRA Red
+    { 'name': 'Red',         'a': 0.000163,  'b': -0.1227, 'c': 137.8, 'd': 34.7, 'w': 43.5,  'meanInt': 220.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255, 255] },     # BGRA Red
     { 'name': 'Olive',       'a': 0.000130,  'b': -0.1091, 'c': 153.8, 'd': 19.2, 'w': 41.8,  'meanInt': 138.4, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 128, 255] }, # BGRA Olive
     { 'name': 'Yellow',      'a': 0.000070,  'b': -0.0702, 'c': 166.3, 'd': 2.1,  'w': 10.9,  'meanInt': 108.6, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255, 255] }, # BGRA Yellow
     { 'name': 'DarkGreen',   'a': 0.000042,  'b': -0.0491, 'c': 171.6, 'd': -7.3, 'w': 40.5,  'meanInt': 133.8, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0, 255] },   # BGRA Dark Green

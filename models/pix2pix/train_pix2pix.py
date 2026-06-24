@@ -44,7 +44,7 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     
     # Baseline layer parameters (fitted from NR206)
     LAYERS_CFG = [
-        { 'name': 'Red',         'meanInt': 206.4, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255] },     # BGR Red
+        { 'name': 'Red',         'meanInt': 220.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255] },     # BGR Red
         { 'name': 'Olive',       'meanInt': 138.4, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 128] },   # BGR Olive
         { 'name': 'Yellow',      'meanInt': 108.6, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255] },   # BGR Yellow
         { 'name': 'DarkGreen',   'meanInt': 133.8, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0] },     # BGR Dark Green
@@ -197,7 +197,7 @@ class PairedOCTDataset(Dataset):
         
         # Initialize default intensities for fallback (adjusted baseline values)
         global_defaults = {
-            'Red': 206.4,
+            'Red': 220.0,
             'Olive': 138.4,
             'Yellow': 108.6,
             'DarkGreen': 133.8,
@@ -210,7 +210,7 @@ class PairedOCTDataset(Dataset):
         # Scaling ratios based on NORMAL1.png tuning relative to real profiled NORMAL1.png values:
         # Real: Red=180.43, Olive=144.61, Yellow=120.62, DarkGreen=137.30, BrightGreen=98.55, Cyan=115.35, Blue=222.17, Magenta=206.72
         ratios = {
-            'Red': 225.0 / 180.43,
+            'Red': 240.0 / 180.43,
             'Olive': 155.0 / 144.61,
             'Yellow': 122.0 / 120.62,
             'DarkGreen': 149.0 / 137.30,
