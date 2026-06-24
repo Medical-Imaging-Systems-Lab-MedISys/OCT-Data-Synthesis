@@ -44,14 +44,14 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     
     # Baseline layer parameters (fitted from NR206)
     LAYERS_CFG = [
-        { 'name': 'Red',         'meanInt': 165.5, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255] },     # BGR Red
-        { 'name': 'Olive',       'meanInt': 129.1, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 128] },   # BGR Olive
-        { 'name': 'Yellow',      'meanInt': 107.4, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255] },   # BGR Yellow
-        { 'name': 'DarkGreen',   'meanInt': 123.3, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0] },     # BGR Dark Green
-        { 'name': 'BrightGreen', 'meanInt': 85.9, 'min_g': 0.95, 'max_g': 1.05,  'color': [0, 255, 0] },     # BGR Bright Green
-        { 'name': 'Cyan',        'meanInt': 99.7, 'min_g': 0.90, 'max_g': 1.10,  'color': [255, 255, 0] },   # BGR Cyan
-        { 'name': 'Blue',        'meanInt': 235.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0] },     # BGR Blue
-        { 'name': 'Magenta',     'meanInt': 193.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }    # BGR Magenta
+        { 'name': 'Red',         'meanInt': 206.4, 'min_g': 0.85, 'max_g': 1.15, 'color': [0, 0, 255] },     # BGR Red
+        { 'name': 'Olive',       'meanInt': 138.4, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 128] },   # BGR Olive
+        { 'name': 'Yellow',      'meanInt': 108.6, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 255, 255] },   # BGR Yellow
+        { 'name': 'DarkGreen',   'meanInt': 133.8, 'min_g': 0.90, 'max_g': 1.10, 'color': [0, 128, 0] },     # BGR Dark Green
+        { 'name': 'BrightGreen', 'meanInt': 75.0,  'min_g': 0.95, 'max_g': 1.05, 'color': [0, 255, 0] },     # BGR Bright Green
+        { 'name': 'Cyan',        'meanInt': 166.8, 'min_g': 0.90, 'max_g': 1.10, 'color': [255, 255, 0] },   # BGR Cyan
+        { 'name': 'Blue',        'meanInt': 137.5, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 0] },     # BGR Blue
+        { 'name': 'Magenta',     'meanInt': 160.6, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }    # BGR Magenta
     ]
     
     if custom_intensities is not None:
@@ -195,16 +195,29 @@ class PairedOCTDataset(Dataset):
         ])
         print(f"Dataset pairing... Pre-loading {len(self.filenames)} files directly into RAM and profiling layer intensities...")
         
-        # Initialize default intensities for fallback
+        # Initialize default intensities for fallback (adjusted baseline values)
         global_defaults = {
-            'Red': 165.5,
-            'Olive': 129.1,
-            'Yellow': 107.4,
-            'DarkGreen': 123.3,
-            'BrightGreen': 85.9,
-            'Cyan': 99.7,
-            'Blue': 235.0,
-            'Magenta': 193.0
+            'Red': 206.4,
+            'Olive': 138.4,
+            'Yellow': 108.6,
+            'DarkGreen': 133.8,
+            'BrightGreen': 75.0,
+            'Cyan': 166.8,
+            'Blue': 137.5,
+            'Magenta': 160.6
+        }
+        
+        # Scaling ratios based on NORMAL1.png tuning relative to real profiled NORMAL1.png values:
+        # Real: Red=180.43, Olive=144.61, Yellow=120.62, DarkGreen=137.30, BrightGreen=98.55, Cyan=115.35, Blue=222.17, Magenta=206.72
+        ratios = {
+            'Red': 225.0 / 180.43,
+            'Olive': 155.0 / 144.61,
+            'Yellow': 122.0 / 120.62,
+            'DarkGreen': 149.0 / 137.30,
+            'BrightGreen': 86.0 / 98.55,
+            'Cyan': 193.0 / 115.35,
+            'Blue': 130.0 / 222.17,
+            'Magenta': 172.0 / 206.72
         }
         
         self.real_images = []
@@ -231,6 +244,9 @@ class PairedOCTDataset(Dataset):
             
             # 3. Profile intensities on full resolution (avoiding dimension mismatch)
             img_intensities = profile_single_image_intensities(real_np, mask_bgra, global_defaults)
+            # Scale intensities based on tuned ratios to preserve contrast relationship
+            for layer in img_intensities:
+                img_intensities[layer] *= ratios[layer]
             self.image_intensities.append(img_intensities)
             
             # 4. Resize real image and cache
