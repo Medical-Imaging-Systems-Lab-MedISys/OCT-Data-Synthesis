@@ -97,7 +97,7 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     # 3. Vectorized rendering of layers
     # Vitreous humor (top background) - Restore clean dark black background
     vitreous_mask = y_coords < b0
-    vitreous_intensity = 60.0
+    vitreous_intensity = 59.0
     vitreous_intensity_full = np.full((height, width), vitreous_intensity, dtype=np.float32)
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity_full, bg_gamma)[vitreous_mask]
     label_mask[vitreous_mask] = [0, 0, 0, 255] # Black
@@ -114,13 +114,13 @@ def generate_oct_sample(width, height, min_gamma, max_gamma):
     # Sclera / deep background (decays quickly back to dark black background)
     sclera_mask = y_coords >= b8
     dist_from_b8 = y_coords - b8
-    sclera_intensity = 60.0 + 20.0 * np.exp(-dist_from_b8 / 25.0)
+    sclera_intensity = 59.0 + 20.0 * np.exp(-dist_from_b8 / 25.0)
     raw_img[sclera_mask] = apply_gamma(sclera_intensity, bg_gamma)[sclera_mask]
     label_mask[sclera_mask] = [0, 0, 0, 255] # Black
 
     # 4. Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = np.random.uniform(0.4, 1.2, size=(height, width))
-    additive = np.random.uniform(-8.0, 8.0, size=(height, width))
+    speckle = np.random.uniform(0.3, 1.3, size=(height, width))
+    additive = np.random.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
     final_img = np.clip(final_img, 0, 255).astype(np.uint8)

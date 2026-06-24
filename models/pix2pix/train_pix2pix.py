@@ -93,17 +93,17 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensi
     # Sclera / deep background (decays quickly back to dark background)
     sclera_mask = is_bg & (y_coords >= b8[None, :])
     dist_from_b8 = y_coords - b8[None, :]
-    sclera_intensity = 60.0 + 20.0 * np.exp(-dist_from_b8 / 25.0)
+    sclera_intensity = 59.0 + 20.0 * np.exp(-dist_from_b8 / 25.0)
     raw_img[sclera_mask] = apply_gamma(sclera_intensity, bg_gamma)[sclera_mask]
     
     # Vitreous humor background (above retina)
     vitreous_mask = is_bg & (y_coords < b8[None, :])
-    vitreous_intensity = np.full((height, width), 60.0, dtype=np.float32)
+    vitreous_intensity = np.full((height, width), 59.0, dtype=np.float32)
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
     # Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = np.random.uniform(0.4, 1.2, size=(height, width))
-    additive = np.random.uniform(-8.0, 8.0, size=(height, width))
+    speckle = np.random.uniform(0.3, 1.3, size=(height, width))
+    additive = np.random.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
     final_img = np.clip(final_img, 0, 255).astype(np.uint8)
