@@ -102,7 +102,7 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
     # Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = np.random.uniform(0.3, 1.3, size=(height, width))
+    speckle = np.random.uniform(0.35, 1.25, size=(height, width))
     additive = np.random.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
