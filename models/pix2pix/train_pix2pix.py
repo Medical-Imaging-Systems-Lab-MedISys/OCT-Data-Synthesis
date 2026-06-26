@@ -183,11 +183,13 @@ def profile_single_image_intensities(real_img, mask_bgra, global_defaults):
     return intensities
 
 class PairedOCTDataset(Dataset):
-    def __init__(self, labels_dir, real_dir, img_size, transform=None):
+    def __init__(self, labels_dir, real_dir, img_size, transform=None, normalization='minmax', is_train=True):
         self.labels_dir = labels_dir
         self.real_dir = real_dir
         self.img_size = img_size
         self.transform = transform
+        self.normalization = normalization
+        self.is_train = is_train
         
         self.filenames = sorted([
             f for f in os.listdir(real_dir)
@@ -221,6 +223,7 @@ class PairedOCTDataset(Dataset):
         }
         
         self.real_images = []
+        self.synth_images = []
         self.masks = []
         self.image_intensities = []
         
@@ -249,34 +252,62 @@ class PairedOCTDataset(Dataset):
                 img_intensities[layer] *= ratios[layer]
             self.image_intensities.append(img_intensities)
             
-            # 4. Resize real image and cache
+            # 4. Resize real image
             real_img_resized = Image.fromarray(real_np).resize((self.img_size, self.img_size), Image.BILINEAR)
-            self.real_images.append(real_img_resized)
             
-        print(f"RAM Pre-loading and profiling complete!")
+            # 5. Synthesize upfront to preload to VRAM (User requested all data in VRAM before training)
+            synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=img_intensities)
+            synth_img = Image.fromarray(synth_np, mode='L')
+            synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            
+            if self.transform:
+                synth_img = self.transform(synth_img)
+                real_img_resized = self.transform(real_img_resized)
+                
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.real_images.append(real_img_resized.to(device))
+            self.synth_images.append(synth_img.to(device))
+            
+        if self.normalization == 'zscore':
+            print("Applying Z-Score Normalization...")
+            real_stack = torch.stack(self.real_images)
+            synth_stack = torch.stack(self.synth_images)
+            self.real_mean = real_stack.mean()
+            self.real_std = real_stack.std()
+            self.synth_mean = synth_stack.mean()
+            self.synth_std = synth_stack.std()
+            
+            self.real_images = [(img - self.real_mean) / (self.real_std + 1e-8) for img in self.real_images]
+            self.synth_images = [(img - self.synth_mean) / (self.synth_std + 1e-8) for img in self.synth_images]
+            
+            self.mean = (self.real_mean, self.synth_mean)
+            self.std = (self.real_std, self.synth_std)
+            
+        print(f"VRAM Pre-loading complete!")
 
     def __len__(self):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-        # 1. Retrieve pre-loaded fast data from RAM
-        real_img = self.real_images[idx]
-        mask_bgra = self.masks[idx]
-        custom_intensities = self.image_intensities[idx]
-        
-        # 2. Online Mathematical Augmentation! (Speckle noise changes every single epoch)
-        synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=custom_intensities)
-        
-        # 3. Convert generated numpy array to PIL and resize
-        synth_img = Image.fromarray(synth_np, mode='L')
-        synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
-        
-        # 4. Transform to tensors
-        if self.transform:
-            synth_img = self.transform(synth_img)
-            real_img = self.transform(real_img)
+        if self.is_train:
+            mask_bgra = self.masks[idx]
+            custom_intensities = self.image_intensities[idx]
+            synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=custom_intensities)
+            synth_img = Image.fromarray(synth_np, mode='L')
+            synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
             
-        return synth_img, real_img
+            if self.transform:
+                synth_img = self.transform(synth_img)
+                
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            synth_img = synth_img.to(device)
+            
+            if self.normalization == 'zscore':
+                synth_img = (synth_img - self.synth_mean) / (self.synth_std + 1e-8)
+                
+            return synth_img, self.real_images[idx]
+        else:
+            return self.synth_images[idx], self.real_images[idx]
 
 # =====================================================================
 # 3. Model Architectures (U-Net & PatchGAN)
@@ -457,12 +488,12 @@ def verify_setup(config):
     loss_D_fake = criterion_GAN(pred_fake, torch.zeros_like(pred_fake))
     loss_D = (loss_D_real + loss_D_fake) * 0.5
     
-    loss_D.backward()
+    loss_D.backward(retain_graph=True)
     print("Discriminator backward pass successful.")
     
     # Generator backward test
     pred_fake_g = discriminator(torch.cat([dummy_synthetic, fake_real], dim=1))
-    loss_G_GAN = criterion_GAN(pred_fake, torch.ones_like(pred_fake))
+    loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
     loss_G_Pixel = criterion_Pixel(fake_real, dummy_real) * pixel_lambda
     loss_G = loss_G_GAN + loss_G_Pixel
     
@@ -492,18 +523,26 @@ def main():
     print(f"PyTorch version: {torch.__version__}")
     print(f"Device: {device}")
     
+    normalization_type = config.get('normalization', 'minmax')
+    
     # Normalization and Dataset setup
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=(0.5,), std=(0.5,))
-    ])
+    if normalization_type == 'zscore':
+        print("Using Z-score normalization")
+        transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.5,), std=(0.5,))
+        ])
     
     # Initialize Datasets using Online Augmentation RAM Cache
-    train_dataset = PairedOCTDataset(config['train_labels_path'], config['train_data_path'], config['img_size'], transform=transform)
-    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True, num_workers=8, pin_memory=True)
+    train_dataset = PairedOCTDataset(config['train_labels_path'], config['train_data_path'], config['img_size'], transform=transform, normalization=normalization_type, is_train=True)
+    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True, num_workers=0)
     
-    test_dataset = PairedOCTDataset(config['test_labels_path'], config['test_data_path'], config['img_size'], transform=transform)
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=4, pin_memory=True)
+    test_dataset = PairedOCTDataset(config['test_labels_path'], config['test_data_path'], config['img_size'], transform=transform, normalization=normalization_type, is_train=False)
+    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=0)
     
     # test_batch will now be dynamically sampled during the epoch loop
     
@@ -681,11 +720,60 @@ def main():
             mean_g_loss_l1 = np.mean(g_losses_l1)
             mean_d_loss = np.mean(d_losses)
             
-            print(f"Epoch {epoch+1} - G loss: {mean_g_loss:.4f} (GAN: {mean_g_loss_gan:.4f}, L1: {mean_g_loss_l1:.4f}), D loss: {mean_d_loss:.4f}")
+            print(f"Epoch {epoch+1} - Train G loss: {mean_g_loss:.4f} (GAN: {mean_g_loss_gan:.4f}, L1: {mean_g_loss_l1:.4f}), Train D loss: {mean_d_loss:.4f}")
             mlflow.log_metric("g_loss", mean_g_loss, step=epoch)
             mlflow.log_metric("g_loss_gan", mean_g_loss_gan, step=epoch)
             mlflow.log_metric("g_loss_l1", mean_g_loss_l1, step=epoch)
             mlflow.log_metric("d_loss", mean_d_loss, step=epoch)
+            
+            # Validation loop
+            generator.eval()
+            discriminator.eval()
+            val_g_losses = []
+            val_g_losses_gan = []
+            val_g_losses_l1 = []
+            val_d_losses = []
+            
+            with torch.no_grad():
+                for val_batch in test_loader:
+                    val_synth_imgs, val_real_imgs = val_batch
+                    val_synth_imgs = val_synth_imgs.to(device)
+                    val_real_imgs = val_real_imgs.to(device)
+                    
+                    # Generate fake images
+                    val_fakes = generator(val_synth_imgs)
+                    
+                    # D validation loss
+                    pred_real = discriminator(val_synth_imgs, val_real_imgs)
+                    loss_D_real = criterion_GAN(pred_real, torch.ones_like(pred_real))
+                    pred_fake = discriminator(val_synth_imgs, val_fakes)
+                    loss_D_fake = criterion_GAN(pred_fake, torch.zeros_like(pred_fake))
+                    val_loss_D = (loss_D_real + loss_D_fake) * 0.5
+                    
+                    # G validation loss
+                    pred_fake_g = discriminator(val_synth_imgs, val_fakes)
+                    val_loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
+                    val_loss_G_Pixel = criterion_Pixel(val_fakes, val_real_imgs) * config.get('lambda_L2', config.get('lambda_L1', 100))
+                    val_loss_G = val_loss_G_GAN + val_loss_G_Pixel
+                    
+                    val_g_losses.append(val_loss_G.item())
+                    val_g_losses_gan.append(val_loss_G_GAN.item())
+                    val_g_losses_l1.append(val_loss_G_Pixel.item())
+                    val_d_losses.append(val_loss_D.item())
+            
+            mean_val_g_loss = np.mean(val_g_losses)
+            mean_val_g_loss_gan = np.mean(val_g_losses_gan)
+            mean_val_g_loss_l1 = np.mean(val_g_losses_l1)
+            mean_val_d_loss = np.mean(val_d_losses)
+            
+            print(f"Epoch {epoch+1} - Val G loss: {mean_val_g_loss:.4f} (GAN: {mean_val_g_loss_gan:.4f}, L1: {mean_val_g_loss_l1:.4f}), Val D loss: {mean_val_d_loss:.4f}")
+            mlflow.log_metric("val_g_loss", mean_val_g_loss, step=epoch)
+            mlflow.log_metric("val_g_loss_gan", mean_val_g_loss_gan, step=epoch)
+            mlflow.log_metric("val_g_loss_l1", mean_val_g_loss_l1, step=epoch)
+            mlflow.log_metric("val_d_loss", mean_val_d_loss, step=epoch)
+            
+            generator.train()
+            discriminator.train()
             
             # Periodically save test visuals to MLflow (every 5 epochs)
             if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
@@ -701,7 +789,19 @@ def main():
                 
                 # Log exactly 3 comparison image grid files (each with prior, synthetic fake, real ground truth side by side)
                 for i in range(min(3, len(test_synth_imgs))):
-                    grid_tensors = [test_synth_imgs[i], test_fakes[i], test_real_imgs[i]]
+                    if normalization_type == 'zscore':
+                        # Denorm to original pixel distribution before visualization to align histograms
+                        mean_s, std_s = test_dataset.synth_mean, test_dataset.synth_std
+                        mean_r, std_r = test_dataset.real_mean, test_dataset.real_std
+                        
+                        img_s = test_synth_imgs[i] * std_s + mean_s
+                        img_f = test_fakes[i] * std_r + mean_r  # Fake aims to be like real
+                        img_r = test_real_imgs[i] * std_r + mean_r
+                        
+                        grid_tensors = [img_s, img_f, img_r]
+                    else:
+                        grid_tensors = [test_synth_imgs[i], test_fakes[i], test_real_imgs[i]]
+                        
                     grid = vutils.make_grid(grid_tensors, nrow=3, normalize=True)
                     mlflow.log_image(tensor_to_numpy(grid), f"validation_grid_{i+1}_epoch_{epoch+1}.png")
                     

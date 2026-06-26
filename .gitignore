@@ -39,3 +39,14 @@ test_checkpoints/
 
 NR206
 synthesis_app.py
+
+# Test and scratch files
+patch_pix2pix.py
+test_callback.py
+test_mlflow.py
+test_mlflow_native.py
+test_out.log
+test_replace.py
+test_replace2.py
+get_mlflow_runs.py
+AGENTS.md

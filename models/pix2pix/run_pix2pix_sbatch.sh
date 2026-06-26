@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --nodelist=n1              # Target RTX Pro 6000 node n1
 #SBATCH --gres=gpu:1               # Request 1 GPU resource per array task
-#SBATCH --array=7-9                # Spawn 3 independent experiments to prevent DAGsHub 500 errors
+#SBATCH --array=5,11               # Run config 5 and the new config 11 (Z-Score) in parallel
 #SBATCH --partition=normal
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/pix2pix_oct_%A_%a.out
@@ -31,11 +31,6 @@ CONFIG_BACKUP="models/pix2pix/config_exp${SLURM_ARRAY_TASK_ID}_backup.json"
 
 cp "$CONFIG_FILE" "$CONFIG_BACKUP"
 sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" "$CONFIG_FILE"
-
-# Stagger the start time of each task by 15 seconds to prevent overwhelming the MLflow API
-STAGGER_DELAY=$((SLURM_ARRAY_TASK_ID * 15))
-echo "Staggering start by $STAGGER_DELAY seconds to prevent MLflow API timeout..."
-sleep $STAGGER_DELAY
 
 # 4. Execute Training
 srun python models/pix2pix/train_pix2pix.py --config "$CONFIG_FILE"
