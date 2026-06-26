@@ -446,9 +446,12 @@ def train():
                 mlflow.log_metric("val_loss_epoch", avg_val_loss, step=epoch)
                 print(f"Epoch {epoch} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-        # Optional: Save final model checkpoint to MLflow
-        # torch.save(model.state_dict(), "final_model.pth")
-        mlflow.log_artifact("final_model.pth")
+        # Save final model checkpoint to MLflow
+        checkpoint_path = "final_model.pth"
+        torch.save(model.state_dict(), checkpoint_path)
+        mlflow.log_artifact(checkpoint_path)
+        if os.path.exists(checkpoint_path):
+            os.remove(checkpoint_path)
 
 if __name__ == "__main__":
     train()
