@@ -510,12 +510,21 @@ def train():
                 mlflow.log_metric("val_loss_epoch", avg_val_loss, step=epoch)
                 print(f"Epoch {epoch} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-        # Save final model checkpoint to MLflow
-        checkpoint_path = "final_model.pth"
-        torch.save(model.state_dict(), checkpoint_path)
-        mlflow.log_artifact(checkpoint_path)
-        if os.path.exists(checkpoint_path):
-            os.remove(checkpoint_path)
+        # 1. Save local persistent checkpoint
+        os.makedirs("conditional-flow-matching/checkpoints", exist_ok=True)
+        local_checkpoint_path = f"conditional-flow-matching/checkpoints/cfm_model_{CONFIG['run_name']}.pt"
+        torch.save(model.state_dict(), local_checkpoint_path)
+        print(f"Saved local persistent checkpoint to {local_checkpoint_path}")
+
+        # 2. Register model to MLflow Model Registry
+        import mlflow.pytorch
+        try:
+            print("Registering model to MLflow DAGsHub registry (this may take a moment)...")
+            mlflow.pytorch.log_model(model, artifact_path="cfm_model", registered_model_name=CONFIG["experiment_name"])
+            print("Model successfully registered to MLflow.")
+        except Exception as e:
+            print(f"Failed to log model to MLflow registry (could be a DAGsHub timeout/size limit): {e}")
+            print(f"Don't worry, your local checkpoint is safely stored at: {local_checkpoint_path}")
 
 if __name__ == "__main__":
     train()

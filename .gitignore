@@ -57,6 +57,8 @@ AGENTS.md
 *.ckpt
 *.safetensors
 *.bin
+checkpoints/
+conditional-flow-matching/checkpoints/
 
 # Temporary script backups
 *backup*.json
