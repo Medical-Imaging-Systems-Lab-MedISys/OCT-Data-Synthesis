@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --nodelist=n1              # Target RTX Pro 6000 node n1
 #SBATCH --gres=gpu:1               # Request 1 GPU resource per array task
-#SBATCH --array=5,11               # Run config 5 and the new config 11 (Z-Score) in parallel
+#SBATCH --array=5,10               # Run config 5 and the new config 11 (Z-Score) in parallel
 #SBATCH --partition=normal
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/pix2pix_oct_%A_%a.out

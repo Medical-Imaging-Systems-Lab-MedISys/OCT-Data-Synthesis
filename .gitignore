@@ -50,3 +50,21 @@ test_replace.py
 test_replace2.py
 get_mlflow_runs.py
 AGENTS.md
+
+# Large files and Model Checkpoints
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Temporary script backups
+*backup*.json
+*backup*.py
+
+# Media and Document Assets
+*.gif
+*.pdf
+*.png
+*.jpg
+*.jpeg

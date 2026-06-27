@@ -9,7 +9,7 @@
   "learning_rate": 0.001,
   "beta1": 0.5,
   "lambda_L2": 100.0,
-  "experiment_name": "Pix2Pix_V2_OnlineAug_Exp10_FastLR_L2",
+  "experiment_name": "Pix2Pix_V2_OnlineAug_Exp10_FastLR_L2_UpdatedPrior_Cropped",
   "mlflow_tracking_uri": "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow",
   "use_multi_gpu": false,
   "small_dataset_threshold": 50,

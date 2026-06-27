@@ -225,15 +225,13 @@ class PairedOCTDataset(Dataset):
         self.real_images = []
         self.synth_images = []
         self.masks = []
-        self.image_intensities = []
         
         for fname in self.filenames:
-            # 1. Load Real Image into RAM
+            # 1. Load Real Image into RAM using cv2
             real_path = os.path.join(self.real_dir, fname)
-            real_img = Image.open(real_path).convert('L')
+            real_np = cv2.imread(real_path, cv2.IMREAD_GRAYSCALE)
             
             # Remove watermark dynamically in RAM
-            real_np = np.array(real_img)
             clean_patch = real_np[350:, 600:]
             real_np[350:, :150] = np.flip(clean_patch, axis=1)
             
@@ -245,20 +243,14 @@ class PairedOCTDataset(Dataset):
                 mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
             self.masks.append(mask_bgra)
             
-            # 3. Profile intensities on full resolution (avoiding dimension mismatch)
-            img_intensities = profile_single_image_intensities(real_np, mask_bgra, global_defaults)
-            # Scale intensities based on tuned ratios to preserve contrast relationship
-            for layer in img_intensities:
-                img_intensities[layer] *= ratios[layer]
-            self.image_intensities.append(img_intensities)
+            # 4. Resize real image using cv2
+            real_np_resized = cv2.resize(real_np, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            real_img_resized = Image.fromarray(real_np_resized, mode='L')
             
-            # 4. Resize real image
-            real_img_resized = Image.fromarray(real_np).resize((self.img_size, self.img_size), Image.BILINEAR)
-            
-            # 5. Synthesize upfront to preload to VRAM (User requested all data in VRAM before training)
-            synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=img_intensities)
-            synth_img = Image.fromarray(synth_np, mode='L')
-            synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            # 5. Synthesize upfront to preload to VRAM without custom intensities
+            synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=None)
+            synth_np_resized = cv2.resize(synth_np, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            synth_img = Image.fromarray(synth_np_resized, mode='L')
             
             if self.transform:
                 synth_img = self.transform(synth_img)
@@ -291,10 +283,9 @@ class PairedOCTDataset(Dataset):
     def __getitem__(self, idx):
         if self.is_train:
             mask_bgra = self.masks[idx]
-            custom_intensities = self.image_intensities[idx]
-            synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=custom_intensities)
-            synth_img = Image.fromarray(synth_np, mode='L')
-            synth_img = synth_img.resize((self.img_size, self.img_size), Image.BILINEAR)
+            synth_np = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5, custom_intensities=None)
+            synth_np_resized = cv2.resize(synth_np, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
+            synth_img = Image.fromarray(synth_np_resized, mode='L')
             
             if self.transform:
                 synth_img = self.transform(synth_img)
@@ -744,14 +735,18 @@ def main():
                     val_fakes = generator(val_synth_imgs)
                     
                     # D validation loss
-                    pred_real = discriminator(val_synth_imgs, val_real_imgs)
+                    val_real_pair = torch.cat([val_synth_imgs, val_real_imgs], dim=1)
+                    pred_real = discriminator(val_real_pair)
                     loss_D_real = criterion_GAN(pred_real, torch.ones_like(pred_real))
-                    pred_fake = discriminator(val_synth_imgs, val_fakes)
+                    
+                    val_fake_pair = torch.cat([val_synth_imgs, val_fakes.detach()], dim=1)
+                    pred_fake = discriminator(val_fake_pair)
                     loss_D_fake = criterion_GAN(pred_fake, torch.zeros_like(pred_fake))
                     val_loss_D = (loss_D_real + loss_D_fake) * 0.5
                     
                     # G validation loss
-                    pred_fake_g = discriminator(val_synth_imgs, val_fakes)
+                    val_fake_pair_g = torch.cat([val_synth_imgs, val_fakes], dim=1)
+                    pred_fake_g = discriminator(val_fake_pair_g)
                     val_loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
                     val_loss_G_Pixel = criterion_Pixel(val_fakes, val_real_imgs) * config.get('lambda_L2', config.get('lambda_L1', 100))
                     val_loss_G = val_loss_G_GAN + val_loss_G_Pixel
@@ -789,21 +784,32 @@ def main():
                 
                 # Log exactly 3 comparison image grid files (each with prior, synthetic fake, real ground truth side by side)
                 for i in range(min(3, len(test_synth_imgs))):
+                    # Move to CPU and handle normalization differences to get approx [0, 1] range
                     if normalization_type == 'zscore':
-                        # Denorm to original pixel distribution before visualization to align histograms
-                        mean_s, std_s = test_dataset.synth_mean, test_dataset.synth_std
-                        mean_r, std_r = test_dataset.real_mean, test_dataset.real_std
+                        mean_s, std_s = test_dataset.synth_mean.item(), test_dataset.synth_std.item()
+                        mean_r, std_r = test_dataset.real_mean.item(), test_dataset.real_std.item()
                         
-                        img_s = test_synth_imgs[i] * std_s + mean_s
-                        img_f = test_fakes[i] * std_r + mean_r  # Fake aims to be like real
-                        img_r = test_real_imgs[i] * std_r + mean_r
-                        
-                        grid_tensors = [img_s, img_f, img_r]
+                        x0_disp = test_synth_imgs[i].squeeze().cpu().numpy() * std_s + mean_s
+                        x1_gen_disp = test_fakes[i].squeeze().cpu().numpy() * std_r + mean_r
+                        x1_gt_disp = test_real_imgs[i].squeeze().cpu().numpy() * std_r + mean_r
                     else:
-                        grid_tensors = [test_synth_imgs[i], test_fakes[i], test_real_imgs[i]]
-                        
-                    grid = vutils.make_grid(grid_tensors, nrow=3, normalize=True)
-                    mlflow.log_image(tensor_to_numpy(grid), f"validation_grid_{i+1}_epoch_{epoch+1}.png")
+                        # Assuming [-1, 1] minmax from composed transform
+                        x0_disp = (test_synth_imgs[i].squeeze().cpu().numpy() + 1.0) / 2.0
+                        x1_gen_disp = (test_fakes[i].squeeze().cpu().numpy() + 1.0) / 2.0
+                        x1_gt_disp = (test_real_imgs[i].squeeze().cpu().numpy() + 1.0) / 2.0
+
+                    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+                    titles = ["Prior (Synthetic Mask)", "Generated Synthesis", "Ground Truth (Real)"]
+                    images = [x0_disp, x1_gen_disp, x1_gt_disp]
+
+                    for ax, title, img in zip(axes, titles, images):
+                        ax.set_title(title, fontsize=14, fontweight='bold', pad=10)
+                        ax.imshow(img, cmap='gray')
+                        ax.axis('off')
+
+                    plt.tight_layout()
+                    mlflow.log_figure(fig, f"validation_grids/epoch_{epoch+1}_sample_{i+1}.png")
+                    plt.close(fig)
                     
         # Log models at the end of the run
         gen_to_log = generator.module if isinstance(generator, nn.DataParallel) else generator
