@@ -19,7 +19,6 @@ module load Miniforge3/26.1.1-3
 # Activate your cluster conda environment
 source activate /data/vds/env_pt
 
-
 # 3. Stage dataset to local NVMe SSD (/tmp) for high-performance I/O
 export LOCAL_SCRATCH="/tmp/${USER}_job"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
@@ -32,4 +31,4 @@ srun python conditional-flow-matching/train_val_2_cropped.py
 # 5. Post-Run Cleanup
 echo "Restoring configuration file and cleaning up SSD scratch..."
 rm -rf "$LOCAL_SCRATCH"
-echo "Cleanup completed successfully!"
+echo "Cleanup completed successfully!" My bash script

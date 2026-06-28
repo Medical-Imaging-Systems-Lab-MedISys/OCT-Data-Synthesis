@@ -5,7 +5,7 @@ import torch
 import torchvision
 from PIL import Image
 from pytorch_lightning.callbacks import Callback
-from pytorch_lightning.utilities.distributed import rank_zero_only
+from pytorch_lightning.utilities.rank_zero import rank_zero_only
 
 
 class ImageLogger(Callback):
@@ -26,7 +26,8 @@ class ImageLogger(Callback):
 
     @rank_zero_only
     def log_local(self, save_dir, split, images, global_step, current_epoch, batch_idx):
-        root = os.path.join(save_dir, "image_log", split)
+        effective_save_dir = save_dir if save_dir is not None else "./outputs"
+        root = os.path.join(effective_save_dir, "image_log", split)
         for k in images:
             grid = torchvision.utils.make_grid(images[k], nrow=4)
             if self.rescale:
@@ -71,6 +72,6 @@ class ImageLogger(Callback):
     def check_frequency(self, check_idx):
         return check_idx % self.batch_freq == 0
 
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         if not self.disabled:
             self.log_img(pl_module, batch, batch_idx, split="train")
