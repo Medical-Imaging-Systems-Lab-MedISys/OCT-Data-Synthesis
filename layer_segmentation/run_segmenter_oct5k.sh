@@ -17,7 +17,7 @@ echo "Job ID: $SLURM_JOB_ID"
 echo "Running on node: $SLURMD_NODENAME"
 
 # 2. Define Directories
-SOURCE_DATA="/home/mmk/Codes/oct_data_synthesis/DATA/OCT5k/OCT5k_split"
+SOURCE_DATA="/data/vds/mmk/Codes/oct_data_synthesis/DATA/OCT5k/OCT5k_split"
 WEIGHTS_SOURCE="/data/vds/mmk/Codes/weights/RETFound_oct_weights.pth" # Keep this as is assuming the weights are still there
 export LOCAL_DATA_DIR="/tmp/OCT5k_${SLURM_JOB_ID}"
 
