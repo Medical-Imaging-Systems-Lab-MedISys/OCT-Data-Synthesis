@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCTID Alignment Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="glass-panel sidebar">
+        <h1>Alignment Tool</h1>
+        
+        <div class="control-group">
+            <label for="image-select">Select Image:</label>
+            <select id="image-select"></select>
+        </div>
+
+        <div class="controls-panel">
+            <div class="control-group">
+                <label>X Offset <span id="val-x">0</span>px</label>
+                <input type="range" id="offset-x" min="-500" max="500" value="0" step="1">
+            </div>
+            <div class="control-group">
+                <label>Y Offset <span id="val-y">0</span>px</label>
+                <input type="range" id="offset-y" min="-500" max="500" value="0" step="1">
+            </div>
+            <div class="control-group">
+                <label>X Scale <span id="val-sx">1.0</span>x</label>
+                <input type="range" id="scale-x" min="0.1" max="5.0" value="1.0" step="0.01">
+            </div>
+            <div class="control-group">
+                <label>Y Scale <span id="val-sy">1.0</span>x</label>
+                <input type="range" id="scale-y" min="0.1" max="5.0" value="1.0" step="0.01">
+            </div>
+            <div class="control-group">
+                <label>Rotate <span id="val-r">0</span>°</label>
+                <input type="range" id="rotate" min="-180" max="180" value="0" step="1">
+            </div>
+            <div class="control-group" style="flex-direction: row; gap: 15px;">
+                <label style="display: flex; align-items: center; gap: 5px; flex-direction: row;">
+                    <input type="checkbox" id="flip-x"> Flip X
+                </label>
+                <label style="display: flex; align-items: center; gap: 5px; flex-direction: row;">
+                    <input type="checkbox" id="flip-y"> Flip Y
+                </label>
+            </div>
+        </div>
+
+        <button id="save-btn" class="btn">Save Alignment</button>
+        <p id="status-msg"></p>
+    </div>
+
+    <div class="main-content">
+        <div class="canvas-container">
+            <!-- The image will be drawn on the canvas, followed by the points -->
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
