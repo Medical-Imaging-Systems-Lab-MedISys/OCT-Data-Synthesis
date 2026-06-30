@@ -21,7 +21,7 @@ source activate /data/vds/env_pt
 export LOCAL_SCRATCH="/tmp/${USER}_job_controlnet"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
-cp -r /data/vds/mmk/Codes/oct_data_synthesis/NR206 "$LOCAL_SCRATCH/"
+cp -r /data/vds/mmk/Codes/oct_data_synthesis/DATA/NR206 "$LOCAL_SCRATCH/"
 export LOCAL_DATA_DIR="$LOCAL_SCRATCH/NR206"
 
 # 3. Execution Configuration
@@ -32,6 +32,7 @@ echo "Starting ControlNet OCT training..."
 srun python ControlNet/train_controlnet_oct.py \
     --checkpoint "$CHECKPOINT_PATH" \
     --batch_size 4 \
+    --train_from_scratch \
     --image_size 256 \
     --epochs 100
 

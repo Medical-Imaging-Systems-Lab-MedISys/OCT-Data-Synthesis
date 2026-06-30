@@ -12,6 +12,25 @@ import mlflow
 from oct_controlnet_dataset import OCTControlNetDataset
 from cldm.logger import ImageLogger
 from cldm.model import create_model, load_state_dict
+
+# -------------------------------------------------------------------
+# Global Seeding for Reproducibility
+# -------------------------------------------------------------------
+import random
+import numpy as np
+import torch
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+try:
+    import pytorch_lightning as pl
+    pl.seed_everything(42, workers=True)
+except ImportError:
+    pass
+# -------------------------------------------------------------------
+
 torch.set_float32_matmul_precision('high')
 
 class MLflowValidationLogger(pl.Callback):
@@ -201,8 +220,8 @@ def main():
             break
 
     # MLflow Setup
-    mlflow_uri = "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow"
-    experiment_name = "Exp13_ControlNet_OCT"
+    mlflow_uri = "http://10.24.38.15:5000"
+    experiment_name = "Exp14_ControlNet_OCT"
     mode_str = "Scratch" if args.train_from_scratch else "Pretrained"
     run_name = f"ControlNet_{mode_str}_OCT_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}"
     mlflow.set_tracking_uri(mlflow_uri)
@@ -243,7 +262,7 @@ def main():
 
         mlflow_val_logger = MLflowValidationLogger(
             val_batches=fixed_validation_batches,
-            every_n_epochs=5,
+            every_n_epochs=20,
             max_images=3
         )
 
@@ -256,13 +275,27 @@ def main():
             logger=mlf_logger,
             callbacks=[
                 local_image_logger,
-                mlflow_val_logger
+                mlflow_val_logger,
+                pl.callbacks.ModelCheckpoint(
+                    dirpath='./ControlNet/checkpoints',
+                    every_n_epochs=20, 
+                    save_top_k=-1, 
+                    filename='controlnet-{epoch:02d}'
+                )
             ],
             log_every_n_steps=5
         )
 
         print(f"Starting {mode_str} ControlNet training.")
         trainer.fit(model, train_loader)
+        
+        # Log only the final trained model to MLflow
+        final_ckpt_path = "./ControlNet/checkpoints/controlnet_final.ckpt"
+        print(f"Saving final model to {final_ckpt_path}...")
+        trainer.save_checkpoint(final_ckpt_path)
+        print("Uploading final model to MLflow (this may take a few minutes)...")
+        mlflow.log_artifact(final_ckpt_path, artifact_path="checkpoints")
+        print("Upload complete!")
 
 if __name__ == '__main__':
     main()

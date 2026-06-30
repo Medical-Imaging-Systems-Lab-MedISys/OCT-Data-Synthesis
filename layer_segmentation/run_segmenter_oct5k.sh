@@ -36,6 +36,9 @@ conda activate /data/vds/env_pt
 # 4. Execute Training
 echo "Starting RETFound Segmentation Training on OCT5k..."
 
+# Ensure we are in the correct directory regardless of where sbatch was called
+cd "$(dirname "$0")"
+
 python train_oct5k.py \
     --data_dir ${LOCAL_DATA_DIR} \
     --weights_path "${LOCAL_DATA_DIR}/RETFound_oct_weights.pth"

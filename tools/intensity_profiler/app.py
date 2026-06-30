@@ -73,7 +73,7 @@ def find_free_port(start_port=5000):
     return start_port
 
 if __name__ == '__main__':
-    port = find_free_port(5000)
+    port = find_free_port(3000)
     print("\n" + "="*60)
     print(f"OCT Intensity Profiler Server starting...")
     print(f"Local URL: http://localhost:{port}")

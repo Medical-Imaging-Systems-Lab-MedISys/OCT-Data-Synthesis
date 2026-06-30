@@ -10,7 +10,7 @@
   "beta1": 0.9,
   "lambda_L1": 100.0,
   "experiment_name": "Pix2Pix_V2_OnlineAug_Exp1_HighMomentum",
-  "mlflow_tracking_uri": "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow",
+  "mlflow_tracking_uri": "http://10.24.38.15:5000",
   "use_multi_gpu": false,
   "small_dataset_threshold": 50,
   "num_gpus": 1

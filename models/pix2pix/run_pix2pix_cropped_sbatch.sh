@@ -23,14 +23,14 @@ source activate /data/vds/env_pt
 LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
-cp -r ./NR206 "$LOCAL_SCRATCH/"
+cp -r ./DATA/NR206 "$LOCAL_SCRATCH/"
 
 # Backup specific config and rewrite dataset paths to point to SSD scratch
 CONFIG_FILE="models/pix2pix/config_exp${SLURM_ARRAY_TASK_ID}.json"
 CONFIG_BACKUP="models/pix2pix/config_exp${SLURM_ARRAY_TASK_ID}_backup.json"
 
 cp "$CONFIG_FILE" "$CONFIG_BACKUP"
-sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" "$CONFIG_FILE"
+sed -i "s|\"./DATA/NR206|\"$LOCAL_SCRATCH/NR206|g" "$CONFIG_FILE"
 
 # 4. Execute Training
 srun python models/pix2pix/train_pix2pix_cropped.py --config "$CONFIG_FILE"

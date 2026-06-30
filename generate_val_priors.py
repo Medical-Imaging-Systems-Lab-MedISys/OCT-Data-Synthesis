@@ -8,6 +8,25 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "conditional-flow-matching"))
 from train_val_2_cropped import synthesize_from_mask, crop_and_pad_curved
 
+# -------------------------------------------------------------------
+# Global Seeding for Reproducibility
+# -------------------------------------------------------------------
+import random
+import numpy as np
+import torch
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+try:
+    import pytorch_lightning as pl
+    pl.seed_everything(42, workers=True)
+except ImportError:
+    pass
+# -------------------------------------------------------------------
+
+
 def main():
     labels_dir = "NR206/test_labels"
     output_dir = "NR206/val_priors"

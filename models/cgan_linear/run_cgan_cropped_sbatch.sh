@@ -9,7 +9,7 @@
 #SBATCH --mem=128G
 #SBATCH --time=24:00:00
 
-LOSS_TYPE="l2"
+LOSS_TYPE="l1"
 
 # 1. Load Environment Modules
 module load Miniforge3/26.1.1-3
@@ -19,7 +19,7 @@ echo "Job ID: $SLURM_JOB_ID"
 echo "Running on node: $SLURMD_NODENAME"
 
 # 2. Define Directories
-SOURCE_DATA="/data/vds/mmk/Codes/oct_data_synthesis/NR206"
+SOURCE_DATA="/data/vds/mmk/Codes/oct_data_synthesis/DATA/NR206"
 export LOCAL_DATA_DIR="/tmp/NR206_${SLURM_JOB_ID}"
 
 # 3. Secure Node /tmp Transfer

@@ -24,7 +24,7 @@ source activate /data/vds/env_pt
 export LOCAL_SCRATCH="/tmp/${USER}_job"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
-cp -r /data/vds/mmk/Codes/oct_data_synthesis/NR206 "$LOCAL_SCRATCH/"
+cp -r /data/vds/mmk/Codes/oct_data_synthesis/DATA/NR206 "$LOCAL_SCRATCH/"
 echo $(ls /tmp/${USER}_job)
 
 # 4. Execute Training

@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import mlflow
+import mlflow.pytorch
 import numpy as np
 
 
@@ -21,15 +22,33 @@ from diffusers import UNet2DModel
 # from dataset import NR206PairedDataset
 
 import datetime
+
+# -------------------------------------------------------------------
+# Global Seeding for Reproducibility
+# -------------------------------------------------------------------
+import random
+import numpy as np
+import torch
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+try:
+    import pytorch_lightning as pl
+    pl.seed_everything(42, workers=True)
+except ImportError:
+    pass
+# -------------------------------------------------------------------
+
 # ==========================================
 # 1. Configuration & Hyperparameters
-LOSS_TYPE = "l1"  # Set to "l1" or "l2"
-
+LOSS_TYPE=os.environ.get("LOSS_TYPE")
 CONFIG = {
     "experiment_name": "Exp12_CFM_Base",
     "run_name": f"CFM_{LOSS_TYPE.upper()}_Cropped_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
     "loss_type": LOSS_TYPE,
-    "mlflow_tracking_uri": "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow",
+    "mlflow_tracking_uri": "http://10.24.38.15:5000",
     "batch_size": 16,
     "epochs": 100,
     "learning_rate": 0.0002,
@@ -129,15 +148,19 @@ def log_validation_grids(x0, x1_gen, x1_gt, epoch, batch_idx):
 # =====================================================================
 # 1. Image Synthesis Helpers (Dynamic Prior Generation)
 # =====================================================================
-
-def sample_gamma_from_bell_curve(min_g, max_g):
+def sample_gamma_from_bell_curve(min_g, max_g, rng=None):
     """
     Samples a gamma value from a normal (bell-curve) distribution
     centered between min_g and max_g, and truncated to those bounds.
     """
+    if rng is None:
+        rng = np.random.default_rng()
+        
     mean = (min_g + max_g) / 2.0
     std = (max_g - min_g) / 6.0
-    return np.clip(np.random.normal(mean, std), min_g, max_g)
+    
+    # Use the passed rng instead of np.random
+    return np.clip(rng.normal(mean, std), min_g, max_g)
 
 def apply_gamma(val, g):
     return 255.0 * np.power(val / 255.0, g)
@@ -149,6 +172,9 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     """
     height, width, _ = mask_bgra.shape
     raw_img = np.zeros((height, width), dtype=np.float32)
+    
+    # --- FIX: Initialize a process-safe random number generator ---
+    rng = np.random.default_rng()
     
     # Baseline layer parameters (fitted from NR206)
     LAYERS_CFG = [
@@ -168,8 +194,9 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
             if name in custom_intensities:
                 cfg['meanInt'] = custom_intensities[name]
     
-    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g']) for cfg in LAYERS_CFG]
-    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
+    # --- FIX: Pass rng into the list comprehension ---
+    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g'], rng) for cfg in LAYERS_CFG]
+    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma, rng)
     
     # Organic micro-texture along columns
     x_indices = np.arange(width)
@@ -209,9 +236,9 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     vitreous_intensity = np.full((height, width), 59.0, dtype=np.float32)
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
-    # Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = np.random.uniform(0.3, 1.2, size=(height, width))
-    additive = np.random.uniform(-12.0, 12.0, size=(height, width))
+    # --- FIX: Apply Speckle Noise using the local rng ---
+    speckle = rng.uniform(0.3, 1.2, size=(height, width))
+    additive = rng.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
     final_img[is_bg] = np.clip(final_img[is_bg], 0, 90.0)
@@ -286,11 +313,12 @@ class NR206DynamicDataset(Dataset):
     at runtime to ensure unique noise/speckle profiles per epoch.
     Author: Mohan Kumar Manepalli
     """
-    def __init__(self, labels_dir, real_dir, min_gamma=0.5, max_gamma=1.5):
+    def __init__(self, labels_dir, real_dir, min_gamma=0.5, max_gamma=1.5, priors_dir=None):
         self.labels_dir = labels_dir
         self.real_dir = real_dir
         self.min_gamma = min_gamma
         self.max_gamma = max_gamma
+        self.priors_dir = priors_dir
         
         # Assume 1-to-1 mapping based on filenames in the real directory
         self.filenames = sorted([
@@ -321,20 +349,24 @@ class NR206DynamicDataset(Dataset):
             mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
             
         # 3. Dynamically Generate Synthetic Prior
-        x0_img = synthesize_from_mask(mask_bgra, self.min_gamma, self.max_gamma)
-        
-        # ==============================================================
-        # FIX: Resize images to a strict power of 2 (e.g., 256x256)
-        # ==============================================================
         target_size = (256, 256) # (width, height) for cv2. Change to (512, 512) if needed.
-        x0_img_squashed = cv2.resize(x0_img, target_size, interpolation=cv2.INTER_LINEAR)
-        x1_img_squashed = cv2.resize(x1_img, target_size, interpolation=cv2.INTER_LINEAR)
-        mask_squashed = cv2.resize(mask_bgra, target_size, interpolation=cv2.INTER_LINEAR)
+        
+        if self.priors_dir is not None:
+            prior_path = os.path.join(self.priors_dir, fname)
+            x0_img = cv2.imread(prior_path, cv2.IMREAD_GRAYSCALE)
+            if x0_img is None:
+                raise FileNotFoundError(f"Prior image not found at {prior_path}")
+        else:
+            x0_img_raw = synthesize_from_mask(mask_bgra, self.min_gamma, self.max_gamma)
+            x0_img_squashed = cv2.resize(x0_img_raw, target_size, interpolation=cv2.INTER_LINEAR)
+            mask_squashed = cv2.resize(mask_bgra, target_size, interpolation=cv2.INTER_LINEAR)
+            x0_img = crop_and_pad_curved(x0_img_squashed, mask_squashed)
         
         # ==============================================================
-        # Crop and pad images below the last curved layer AFTER resizing
+        # Resize, Crop and pad ground truth real OCT
         # ==============================================================
-        x0_img = crop_and_pad_curved(x0_img_squashed, mask_squashed)
+        mask_squashed = cv2.resize(mask_bgra, target_size, interpolation=cv2.INTER_LINEAR)
+        x1_img_squashed = cv2.resize(x1_img, target_size, interpolation=cv2.INTER_LINEAR)
         x1_img = crop_and_pad_curved(x1_img_squashed, mask_squashed)
         
         # 4. Normalize to [-1.0, 1.0]
@@ -366,6 +398,7 @@ def train():
 
     val_real = os.path.join(local_data_dir, "test")
     val_labels = os.path.join(local_data_dir, "test_labels")
+    val_priors = os.path.join(local_data_dir, "val_priors")
 
     # Initialize Datasets
     train_dataset = NR206DynamicDataset(
@@ -379,7 +412,8 @@ def train():
         labels_dir=val_labels, 
         real_dir=val_real,
         min_gamma=0.5,
-        max_gamma=1.5
+        max_gamma=1.5,
+        priors_dir=val_priors
     )
 
     # Initialize DataLoaders
@@ -517,7 +551,6 @@ def train():
         print(f"Saved local persistent checkpoint to {local_checkpoint_path}")
 
         # 2. Register model to MLflow Model Registry
-        import mlflow.pytorch
         try:
             print("Registering model to MLflow DAGsHub registry (this may take a moment)...")
             mlflow.pytorch.log_model(model, artifact_path="cfm_model", registered_model_name=CONFIG["experiment_name"])

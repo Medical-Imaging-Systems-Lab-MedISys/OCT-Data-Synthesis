@@ -103,7 +103,7 @@ squeue -u $USER
 ## 5. Remote MLflow Tracker Logging (DAGsHub)
 
 Both scripts are configured to log training configurations, metrics, and validation output images directly to your remote DAGsHub MLflow server:
-`https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow`
+`http://10.24.38.15:5000`
 
 
 

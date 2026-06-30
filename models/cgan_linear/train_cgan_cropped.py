@@ -15,13 +15,32 @@ import mlflow.pytorch
 from datetime import datetime
 from tqdm import tqdm
 
+# -------------------------------------------------------------------
+# Global Seeding for Reproducibility
+# -------------------------------------------------------------------
+import random
+import numpy as np
+import torch
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+try:
+    import pytorch_lightning as pl
+    pl.seed_everything(42, workers=True)
+except ImportError:
+    pass
+# -------------------------------------------------------------------
+
+
 # ==========================================
 # Configuration & Hyperparameters
 # ==========================================
 CONFIG = {
     "experiment_name": "Exp13_cGAN_Cropped",
     "run_name": "",
-    "mlflow_tracking_uri": "https://dagshub.com/IISc-MedISys/OCT-Data-Synthesis.mlflow",
+    "mlflow_tracking_uri": "http://10.24.38.15:5000",
     "batch_size": 16,
     "epochs": 100,
     "lr_G": 0.0002,
@@ -39,15 +58,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # =====================================================================
 # 1. Image Synthesis Helpers (Dynamic Prior Generation)
 # =====================================================================
-def sample_gamma_from_bell_curve(min_g, max_g):
+def sample_gamma_from_bell_curve(min_g, max_g, rng=None):
+    if rng is None: rng = np.random.RandomState()
     mean = (min_g + max_g) / 2.0
     std = (max_g - min_g) / 6.0
-    return np.clip(np.random.normal(mean, std), min_g, max_g)
+    return np.clip(rng.normal(mean, std), min_g, max_g)
 
 def apply_gamma(val, g):
     return 255.0 * np.power(val / 255.0, g)
 
 def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensities=None):
+    rng = np.random.RandomState()
     height, width, _ = mask_bgra.shape
     raw_img = np.zeros((height, width), dtype=np.float32)
     
@@ -62,8 +83,8 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
         { 'name': 'Magenta',     'meanInt': 210.0, 'min_g': 0.85, 'max_g': 1.15, 'color': [255, 0, 255] }
     ]
     
-    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g']) for cfg in LAYERS_CFG]
-    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
+    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g'], rng) for cfg in LAYERS_CFG]
+    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma, rng)
     
     x_indices = np.arange(width)
     layer_texture = (np.sin(x_indices * 0.05) * 3 + np.cos(x_indices * 0.02) * 2)[None, :]
@@ -96,8 +117,8 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     vitreous_intensity = np.full((height, width), 59.0, dtype=np.float32)
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
-    speckle = np.random.uniform(0.3, 1.2, size=(height, width))
-    additive = np.random.uniform(-12.0, 12.0, size=(height, width))
+    speckle = rng.uniform(0.3, 1.2, size=(height, width))
+    additive = rng.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
     final_img[is_bg] = np.clip(final_img[is_bg], 0, 90.0)
@@ -342,7 +363,12 @@ def train():
                 optimizerG.step()
                 
                 global_step += 1
-                mlflow.log_metrics({"D_loss": loss_D.item(), "G_loss": loss_G.item()}, step=global_step)
+                mlflow.log_metrics({
+                    "D_loss": loss_D.item(), 
+                    "G_loss": loss_G.item(),
+                    "G_loss_GAN": loss_G_GAN.item(),
+                    f"G_loss_{CONFIG['loss_type']}": loss_G_Pixel.item()
+                }, step=global_step)
                 pbar.set_postfix({"D": f"{loss_D.item():.4f}", "G": f"{loss_G.item():.4f}"})
 
             # --- Validation & Plotting ---

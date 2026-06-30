@@ -18,6 +18,25 @@ import mlflow.pytorch
 from datetime import datetime
 import argparse
 
+# -------------------------------------------------------------------
+# Global Seeding for Reproducibility
+# -------------------------------------------------------------------
+import random
+import numpy as np
+import torch
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+try:
+    import pytorch_lightning as pl
+    pl.seed_everything(42, workers=True)
+except ImportError:
+    pass
+# -------------------------------------------------------------------
+
+
 # =====================================================================
 # 1. Image Synthesis Helper (from masks to synthetic speckled images)
 # =====================================================================
@@ -29,7 +48,7 @@ def sample_gamma_from_bell_curve(min_g, max_g):
     """
     mean = (min_g + max_g) / 2.0
     std = (max_g - min_g) / 6.0
-    return np.clip(np.random.normal(mean, std), min_g, max_g)
+    return np.clip(rng.normal(mean, std), min_g, max_g)
 
 def apply_gamma(val, g):
     return 255.0 * np.power(val / 255.0, g)
@@ -60,8 +79,8 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
             if name in custom_intensities:
                 cfg['meanInt'] = custom_intensities[name]
     
-    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g']) for cfg in LAYERS_CFG]
-    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
+    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g'], rng) for cfg in LAYERS_CFG]
+    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma, rng)
     
     # Organic micro-texture along columns
     x_indices = np.arange(width)
@@ -102,8 +121,8 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
     # Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = np.random.uniform(0.3, 1.2, size=(height, width))
-    additive = np.random.uniform(-12.0, 12.0, size=(height, width))
+    speckle = rng.uniform(0.3, 1.2, size=(height, width))
+    additive = rng.uniform(-12.0, 12.0, size=(height, width))
     
     final_img = raw_img * speckle + additive
     final_img[is_bg] = np.clip(final_img[is_bg], 0, 90.0)

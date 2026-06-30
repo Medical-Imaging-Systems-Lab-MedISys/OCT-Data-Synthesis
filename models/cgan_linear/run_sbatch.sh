@@ -23,11 +23,11 @@ source activate /data/vds/env_pt
 #
 # LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_JOB_ID}"
 # mkdir -p "$LOCAL_SCRATCH"
-# cp -r ./NR206 "$LOCAL_SCRATCH/"
+# cp -r ./DATA/NR206 "$LOCAL_SCRATCH/"
 #
 # # Backup config.json and point to scratch path
 # cp models/cgan_linear/config.json models/cgan_linear/config_backup.json
-# sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" models/cgan_linear/config.json
+# sed -i "s|\"./DATA/NR206|\"$LOCAL_SCRATCH/NR206|g" models/cgan_linear/config.json
 
 # 4. Execute Training
 NUM_GPUS=4

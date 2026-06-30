@@ -16,7 +16,7 @@ source activate /data/vds/env_pt
 LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
-cp -r ./NR206 "$LOCAL_SCRATCH/"
+cp -r ./DATA/NR206 "$LOCAL_SCRATCH/"
 
 # Check if individual config files exist, else use default logic
 CONFIG_FILE="models/cgan_linear/config_exp${SLURM_ARRAY_TASK_ID}.json"
@@ -24,7 +24,7 @@ CONFIG_BACKUP="models/cgan_linear/config_exp${SLURM_ARRAY_TASK_ID}_backup.json"
 
 if [ -f "$CONFIG_FILE" ]; then
     cp "$CONFIG_FILE" "$CONFIG_BACKUP"
-    sed -i "s|\"./NR206|\"$LOCAL_SCRATCH/NR206|g" "$CONFIG_FILE"
+    sed -i "s|\"./DATA/NR206|\"$LOCAL_SCRATCH/NR206|g" "$CONFIG_FILE"
     srun python models/cgan_linear/conditional-GAN-generating-NR206.py --config "$CONFIG_FILE"
     mv "$CONFIG_BACKUP" "$CONFIG_FILE"
 else

@@ -16,7 +16,7 @@ source activate /data/vds/env_pt
 LOCAL_SCRATCH="/tmp/${USER}_job_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
-cp -r ./NR206 "$LOCAL_SCRATCH/"
+cp -r ./DATA/NR206 "$LOCAL_SCRATCH/"
 
 srun python conditional-flow-matching/train_val.py
 

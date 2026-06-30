@@ -21,9 +21,10 @@ source activate /data/vds/env_pt
 
 # 3. Stage dataset to local NVMe SSD (/tmp) for high-performance I/O
 export LOCAL_SCRATCH="/tmp/${USER}_job"
+export LOSS_TYPE=l1
 echo "Staging dataset to local SSD scratch: $LOCAL_SCRATCH"
 mkdir -p "$LOCAL_SCRATCH"
-cp -r /data/vds/mmk/Codes/oct_data_synthesis/NR206 "$LOCAL_SCRATCH/"
+cp -r /data/vds/mmk/Codes/oct_data_synthesis/DATA/NR206 "$LOCAL_SCRATCH/"
 echo $(ls /tmp/${USER}_job)
 
 srun python conditional-flow-matching/train_val_2_cropped.py
