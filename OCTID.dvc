@@ -1,0 +1,6 @@
+outs:
+- md5: b35b560361d0e59f0cb24e8bac049f76.dir
+  size: 51275754
+  nfiles: 6
+  hash: md5
+  path: OCTID

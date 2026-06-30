@@ -70,3 +70,6 @@ conditional-flow-matching/checkpoints/
 *.png
 *.jpg
 *.jpeg
+/Duke DME Chiu 2015
+/Kaggle Retinal Segmentation Dataset
+/OCTID

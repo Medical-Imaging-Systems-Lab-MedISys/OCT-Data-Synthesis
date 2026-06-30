@@ -1,0 +1,6 @@
+outs:
+- md5: 316f4b68d38b2b8193d14be220badcda.dir
+  size: 380234338
+  nfiles: 3
+  hash: md5
+  path: Kaggle Retinal Segmentation Dataset
