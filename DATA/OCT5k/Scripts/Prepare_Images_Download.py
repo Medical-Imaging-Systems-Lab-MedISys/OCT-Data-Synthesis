@@ -23,28 +23,28 @@ gdown.download(link)
 ### Use unrar to extract the downloaded file ###
 ### On Ubuntu e.g. use 'sudo apt install unrar' ###
 
-import os; os.system("unrar x "Macular Dataset-Heidelberg.rar" > Output_Log.out")
-import os; os.system("rm -rf "Macular Dataset-Heidelberg.rar"")
+import os; os.system('unrar x "Macular Dataset-Heidelberg.rar" > Output_Log.out')
+import os; os.system('rm -rf "Macular Dataset-Heidelberg.rar"')
 ### Use unrar to extract the downloaded file ###
 ### On Ubuntu e.g. use 'sudo apt install unrar' ###
 
-import os; os.system("unrar x "Macular-Dataset-R.Rasti_old.rar" > Output_Log.out")
-import os; os.system("rm -rf "Macular-Dataset-R.Rasti_old.rar"")
+import os; os.system('unrar x "Macular-Dataset-R.Rasti_old.rar" > Output_Log.out')
+import os; os.system('rm -rf "Macular-Dataset-R.Rasti_old.rar"')
 ### Get the password from "https://sites.google.com/site/hosseinrabbanikhorasgani/available-datasets/dataset-for-oct-classification-50-normal-48-amd-50-dme"
-import os; os.system("mkdir Macular-Dataset-R.Rasti_old")
-import os; os.system("unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part01.zip" -d "./Macular-Dataset-R.Rasti_old/"")
-import os; os.system("unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part02.zip" -d "./Macular-Dataset-R.Rasti_old/"")
-import os; os.system("unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part03.zip" -d "./Macular-Dataset-R.Rasti_old/"")
-import os; os.system("unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part04.zip" -d "./Macular-Dataset-R.Rasti_old/"")
-import os; os.system("rm -rf "Macular-Dataset-R.Rasti-part01.zip" "Macular-Dataset-R.Rasti-part02.zip" "Macular-Dataset-R.Rasti-part03.zip" "Macular-Dataset-R.Rasti-part04.zip"")
+import os; os.system('mkdir Macular-Dataset-R.Rasti_old')
+import os; os.system('unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part01.zip" -d "./Macular-Dataset-R.Rasti_old/"')
+import os; os.system('unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part02.zip" -d "./Macular-Dataset-R.Rasti_old/"')
+import os; os.system('unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part03.zip" -d "./Macular-Dataset-R.Rasti_old/"')
+import os; os.system('unzip -q -P "typepasswordhere" "Macular-Dataset-R.Rasti-part04.zip" -d "./Macular-Dataset-R.Rasti_old/"')
+import os; os.system('rm -rf "Macular-Dataset-R.Rasti-part01.zip" "Macular-Dataset-R.Rasti-part02.zip" "Macular-Dataset-R.Rasti-part03.zip" "Macular-Dataset-R.Rasti-part04.zip"')
 ### Download Kermany dataset ###
 #!wget https://md-datasets-cache-zipfiles-prod.s3.eu-west-1.amazonaws.com/rscbjbr9sj-3.zip
 
-import os; os.system("wget https://data.mendeley.com/public-files/datasets/rscbjbr9sj/files/810b2ce2-11c3-4424-996e-3bef36600907/file_downloaded -O ZhangLabData.zip -o Output_Log.out")
+import os; os.system('wget https://data.mendeley.com/public-files/datasets/rscbjbr9sj/files/810b2ce2-11c3-4424-996e-3bef36600907/file_downloaded -O ZhangLabData.zip -o Output_Log.out')
 ### Use unzip to extract the downloaded file ###
 
-import os; os.system("unzip -q ZhangLabData.zip")
-import os; os.system("rm -rf ZhangLabData.zip")
+import os; os.system('unzip -q ZhangLabData.zip')
+import os; os.system('rm -rf ZhangLabData.zip')
 def make_target_dirs(target_paths):
     for dirname in set(os.path.dirname(p) for p in target_paths):
         if not os.path.isdir(dirname):
@@ -132,8 +132,8 @@ for i in range(0, len(fromPath)):
         #print (toImage);
         #break;
 # Remove downloaded images if not needed
-import os; os.system("rm -rf CellData")
-import os; os.system("rm -rf Dataset_3x50_Final")
-import os; os.system("rm -rf Macular-Dataset-R.Rasti_old")
-import os; os.system("rm -rf Output_Log.out")
+import os; os.system('rm -rf CellData')
+import os; os.system('rm -rf Dataset_3x50_Final')
+import os; os.system('rm -rf Macular-Dataset-R.Rasti_old')
+import os; os.system('rm -rf Output_Log.out')
 
