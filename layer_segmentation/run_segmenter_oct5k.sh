@@ -18,7 +18,7 @@ echo "Running on node: $SLURMD_NODENAME"
 
 # 2. Define Directories
 SOURCE_DATA="/data/vds/mmk/Codes/oct_data_synthesis/DATA/OCT5k/OCT5k_split"
-WEIGHTS_SOURCE="/data/vds/mmk/Codes/weights/RETFound_oct_weights.pth" # Keep this as is assuming the weights are still there
+WEIGHTS_SOURCE="/data/vds/mmk/Codes/oct_data_synthesis/layer_segmentation/checkpoints/RETFound_mae_natureOCT.pth"
 export LOCAL_DATA_DIR="/tmp/OCT5k_${SLURM_JOB_ID}"
 
 # 3. Secure Node /tmp Transfer
@@ -36,12 +36,12 @@ conda activate /data/vds/env_pt
 # 4. Execute Training
 echo "Starting RETFound Segmentation Training on OCT5k..."
 
-# Ensure we are in the correct directory regardless of where sbatch was called
-cd "$(dirname "$0")"
+# Navigate to the correct directory (SLURM executes from a spool dir by default)
+cd /data/vds/mmk/Codes/oct_data_synthesis/layer_segmentation
 
 python train_oct5k.py \
     --data_dir ${LOCAL_DATA_DIR} \
-    --weights_path "${LOCAL_DATA_DIR}/RETFound_oct_weights.pth"
+    --weights_path "${LOCAL_DATA_DIR}/RETFound_mae_natureOCT.pth"
 
 # 5. Node Storage Cleanup
 echo "Training process finished. Initiating cleanup of ${LOCAL_DATA_DIR}..."
