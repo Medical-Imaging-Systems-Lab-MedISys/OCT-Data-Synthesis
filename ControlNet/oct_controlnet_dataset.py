@@ -118,7 +118,15 @@ def crop_and_pad_curved(image, mask_bgra):
     cropped_img = image[:cropped_h]
     padded_img = np.pad(cropped_img, ((0, pad_h), (0, pad_w)), mode='constant')
     final_image = np.where(keep_mask, padded_img, tiled_bg)
-    return final_image
+    
+    # Calculate background mask (1.0 where B=G=R=0, 0.0 otherwise)
+    final_bg_mask = np.ones((max_dim, max_dim), dtype=np.float32)
+    active_keep_mask = keep_mask[:cropped_h, :W]
+    active_is_bg = is_bg[:cropped_h, :W]
+    active_layer = active_keep_mask & (~active_is_bg)
+    final_bg_mask[:cropped_h, :W][active_layer] = 0.0
+    
+    return final_image, final_bg_mask
 
 # =====================================================================
 # ControlNet Specific OCT Dataset
@@ -147,8 +155,9 @@ class OCTControlNetDataset(Dataset):
         
         # 1. Load Ground Truth Real OCT scan & remove watermark
         x1_img = cv2.imread(real_path, cv2.IMREAD_GRAYSCALE)
-        clean_patch = x1_img[350:, 600:]
-        x1_img[350:, :150] = np.flip(clean_patch, axis=1)
+        if x1_img.shape[0] >= 500 and x1_img.shape[1] >= 750:
+            clean_patch = x1_img[350:, 600:]
+            x1_img[350:, :150] = np.flip(clean_patch, axis=1)
             
         # 2. Load Segmentation Mask (BGRA layer map)
         mask_bgra = cv2.imread(lbl_path, cv2.IMREAD_UNCHANGED)
@@ -168,19 +177,19 @@ class OCTControlNetDataset(Dataset):
             x0_img = synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.5)
             x0_squashed = cv2.resize(x0_img, resize_dim, interpolation=cv2.INTER_LINEAR)
             mask_squashed = cv2.resize(mask_bgra, resize_dim, interpolation=cv2.INTER_LINEAR)
-            x0_final_gray = crop_and_pad_curved(x0_squashed, mask_squashed)
+            x0_final_gray, _ = crop_and_pad_curved(x0_squashed, mask_squashed)
         
         # 4 & 5. Strict Squashing, Resizing, and Cropping for Ground Truth Real OCT
         mask_squashed = cv2.resize(mask_bgra, resize_dim, interpolation=cv2.INTER_LINEAR)
         x1_squashed = cv2.resize(x1_img, resize_dim, interpolation=cv2.INTER_LINEAR)
-        x1_final_gray = crop_and_pad_curved(x1_squashed, mask_squashed)
+        x1_final_gray, bg_mask = crop_and_pad_curved(x1_squashed, mask_squashed)
         
         # 6. Convert Grayscale to 3-Channel RGB space for standard ControlNet UNet compatibility
         source_rgb = cv2.cvtColor(x0_final_gray, cv2.COLOR_GRAY2RGB)
         target_rgb = cv2.cvtColor(x1_final_gray, cv2.COLOR_GRAY2RGB)
         
         # 7. Standard Normalizations matching standard control net code structures
-        source = source_rgb.astype(np.float32) / 255.0           # Normalize hint to [0, 1]
+        source = (source_rgb.astype(np.float32) / 127.5) - 1.0   # Normalize hint to [-1, 1]
         target = (target_rgb.astype(np.float32) / 127.5) - 1.0  # Normalize target to [-1, 1]
         
-        return dict(jpg=target, txt=self.default_prompt, hint=source)
+        return dict(jpg=target, txt=self.default_prompt, hint=source, bg_mask=bg_mask)

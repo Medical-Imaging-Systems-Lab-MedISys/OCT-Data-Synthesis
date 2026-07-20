@@ -48,7 +48,7 @@ def sample_gamma_from_bell_curve(min_g, max_g):
     """
     mean = (min_g + max_g) / 2.0
     std = (max_g - min_g) / 6.0
-    return np.clip(rng.normal(mean, std), min_g, max_g)
+    return np.clip(np.random.normal(mean, std), min_g, max_g)
 
 def apply_gamma(val, g):
     return 255.0 * np.power(val / 255.0, g)
@@ -79,8 +79,8 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
             if name in custom_intensities:
                 cfg['meanInt'] = custom_intensities[name]
     
-    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g'], rng) for cfg in LAYERS_CFG]
-    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma, rng)
+    layer_gammas = [sample_gamma_from_bell_curve(cfg['min_g'], cfg['max_g']) for cfg in LAYERS_CFG]
+    bg_gamma = sample_gamma_from_bell_curve(min_gamma, max_gamma)
     
     # Organic micro-texture along columns
     x_indices = np.arange(width)
@@ -121,10 +121,10 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     raw_img[vitreous_mask] = apply_gamma(vitreous_intensity, bg_gamma)[vitreous_mask]
     
     # Apply Speckle Noise (Rayleigh/Gaussian simulation) and Clamping
-    speckle = rng.uniform(0.3, 1.2, size=(height, width))
-    additive = rng.uniform(-12.0, 12.0, size=(height, width))
+    speckle = np.random.uniform(0.3, 1.2, size=(height, width))
+    additive_noise = np.random.uniform(-12.0, 12.0, size=(height, width))
     
-    final_img = raw_img * speckle + additive
+    final_img = raw_img * speckle + additive_noise
     final_img[is_bg] = np.clip(final_img[is_bg], 0, 90.0)
     
     final_img = np.clip(final_img, 0, 255).astype(np.uint8)
@@ -244,15 +244,17 @@ class PairedOCTDataset(Dataset):
         self.real_images = []
         self.synth_images = []
         self.masks = []
+        self.weight_masks = []
         
         for fname in self.filenames:
             # 1. Load Real Image into RAM using cv2
             real_path = os.path.join(self.real_dir, fname)
             real_np = cv2.imread(real_path, cv2.IMREAD_GRAYSCALE)
             
-            # Remove watermark dynamically in RAM
-            clean_patch = real_np[350:, 600:]
-            real_np[350:, :150] = np.flip(clean_patch, axis=1)
+            # Remove watermark dynamically in RAM if dimensions are compatible
+            if real_np is not None and real_np.shape[0] >= 500 and real_np.shape[1] >= 750:
+                clean_patch = real_np[350:, 600:]
+                real_np[350:, :150] = np.flip(clean_patch, axis=1)
             
             # 2. Load Real Anatomical Mask into RAM
             lbl_path = os.path.join(self.labels_dir, fname)
@@ -261,6 +263,13 @@ class PairedOCTDataset(Dataset):
                 alpha = np.full((mask_bgra.shape[0], mask_bgra.shape[1], 1), 255, dtype=np.uint8)
                 mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
             self.masks.append(mask_bgra)
+            
+            # Compute spatial weight mask
+            mask_resized = cv2.resize(mask_bgra, (self.img_size, self.img_size), interpolation=cv2.INTER_NEAREST)
+            is_bg = (mask_resized[:, :, 0] == 0) & (mask_resized[:, :, 1] == 0) & (mask_resized[:, :, 2] == 0)
+            weight_mask_np = np.ones((1, self.img_size, self.img_size), dtype=np.float32)
+            weight_mask_np[0, is_bg] = 0.4
+            weight_mask_tensor = torch.from_numpy(weight_mask_np)
             
             # 4. Resize real image using cv2
             real_np_resized = cv2.resize(real_np, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
@@ -278,6 +287,7 @@ class PairedOCTDataset(Dataset):
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
             self.real_images.append(real_img_resized.to(device))
             self.synth_images.append(synth_img.to(device))
+            self.weight_masks.append(weight_mask_tensor.to(device))
             
         if self.normalization == 'zscore':
             print("Applying Z-Score Normalization...")
@@ -295,10 +305,9 @@ class PairedOCTDataset(Dataset):
             self.std = (self.real_std, self.synth_std)
             
         print(f"VRAM Pre-loading complete!")
-
     def __len__(self):
         return len(self.filenames)
-
+ 
     def __getitem__(self, idx):
         if self.is_train:
             mask_bgra = self.masks[idx]
@@ -315,9 +324,9 @@ class PairedOCTDataset(Dataset):
             if self.normalization == 'zscore':
                 synth_img = (synth_img - self.synth_mean) / (self.synth_std + 1e-8)
                 
-            return synth_img, self.real_images[idx]
+            return synth_img, self.real_images[idx], self.weight_masks[idx]
         else:
-            return self.synth_images[idx], self.real_images[idx]
+            return self.synth_images[idx], self.real_images[idx], self.weight_masks[idx]
 
 # =====================================================================
 # 3. Model Architectures (U-Net & PatchGAN)
@@ -386,38 +395,57 @@ class UNetGenerator(nn.Module):
 
 
 class PatchGANDiscriminator(nn.Module):
-    def __init__(self, input_nc=2, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d):
+    def __init__(self, input_nc=2, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, non_overlapping_16x16=False):
         """
-        PatchGAN (70x70) Classifier with Spectral Normalization.
-        Takes concatenated input/target images and classifies local patches.
+        PatchGAN Classifier with Spectral Normalization.
+        Can be configured as a standard overlapping 70x70 PatchGAN,
+        or a non-overlapping 16x16 PatchGAN.
         """
         super().__init__()
         import torch.nn.utils.spectral_norm as spectral_norm
         
-        model = [
-            spectral_norm(nn.Conv2d(input_nc, ndf, kernel_size=4, stride=2, padding=1)),
-            nn.LeakyReLU(0.2, True)
-        ]
-        
-        nf_mult = 1
-        for n in range(1, n_layers):
+        if non_overlapping_16x16:
+            # 16x16 non-overlapping PatchGAN: kernel size matches stride to prevent overlap
+            model = [
+                spectral_norm(nn.Conv2d(input_nc, ndf, kernel_size=4, stride=4, padding=0)),
+                nn.LeakyReLU(0.2, True),
+                
+                spectral_norm(nn.Conv2d(ndf, ndf * 2, kernel_size=2, stride=2, padding=0, bias=False)),
+                norm_layer(ndf * 2),
+                nn.LeakyReLU(0.2, True),
+                
+                spectral_norm(nn.Conv2d(ndf * 2, ndf * 4, kernel_size=2, stride=2, padding=0, bias=False)),
+                norm_layer(ndf * 4),
+                nn.LeakyReLU(0.2, True),
+                
+                spectral_norm(nn.Conv2d(ndf * 4, 1, kernel_size=1, stride=1, padding=0))
+            ]
+        else:
+            model = [
+                spectral_norm(nn.Conv2d(input_nc, ndf, kernel_size=4, stride=2, padding=1)),
+                nn.LeakyReLU(0.2, True)
+            ]
+            
+            nf_mult = 1
+            for n in range(1, n_layers):
+                nf_mult_prev = nf_mult
+                nf_mult = min(2 ** n, 8)
+                model += [
+                    spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=2, padding=1, bias=False)),
+                    norm_layer(ndf * nf_mult),
+                    nn.LeakyReLU(0.2, True)
+                ]
+                
             nf_mult_prev = nf_mult
-            nf_mult = min(2 ** n, 8)
+            nf_mult = min(2 ** n_layers, 8)
             model += [
-                spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=2, padding=1, bias=False)),
+                spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=1, padding=1, bias=False)),
                 norm_layer(ndf * nf_mult),
                 nn.LeakyReLU(0.2, True)
             ]
             
-        nf_mult_prev = nf_mult
-        nf_mult = min(2 ** n_layers, 8)
-        model += [
-            spectral_norm(nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult, kernel_size=4, stride=1, padding=1, bias=False)),
-            norm_layer(ndf * nf_mult),
-            nn.LeakyReLU(0.2, True)
-        ]
-        
-        model += [spectral_norm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=4, stride=1, padding=1))]
+            model += [spectral_norm(nn.Conv2d(ndf * nf_mult, 1, kernel_size=4, stride=1, padding=1))]
+            
         self.model = nn.Sequential(*model)
 
     def forward(self, x):
@@ -489,9 +517,8 @@ def verify_setup(config):
     
     # Loss functions
     criterion_GAN = nn.BCEWithLogitsLoss()
-    use_L2 = 'lambda_L2' in config
-    criterion_Pixel = nn.MSELoss() if use_L2 else nn.L1Loss()
-    pixel_lambda = config.get('lambda_L2', config.get('lambda_L1', 100.0))
+    criterion_Pixel = nn.L1Loss(reduction='none')
+    pixel_lambda = config.get('lambda_L1', 100.0)
     
     # Calculate losses & backward pass test
     loss_D_real = criterion_GAN(pred_real, torch.ones_like(pred_real))
@@ -504,7 +531,8 @@ def verify_setup(config):
     # Generator backward test
     pred_fake_g = discriminator(torch.cat([dummy_synthetic, fake_real], dim=1))
     loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
-    loss_G_Pixel = criterion_Pixel(fake_real, dummy_real) * pixel_lambda
+    dummy_weight_mask = torch.ones_like(fake_real)
+    loss_G_Pixel = (criterion_Pixel(fake_real, dummy_real) * dummy_weight_mask).mean() * pixel_lambda
     loss_G = loss_G_GAN + loss_G_Pixel
     
     loss_G.backward()
@@ -533,13 +561,19 @@ def main():
     print(f"PyTorch version: {torch.__version__}")
     print(f"Device: {device}")
     
-    normalization_type = config.get('normalization', 'minmax')
+    normalization_type = config.get('normalization', '8bit')
     
     # Normalization and Dataset setup
     if normalization_type == 'zscore':
         print("Using Z-score normalization")
         transform = transforms.Compose([
             transforms.ToTensor()
+        ])
+    elif normalization_type == '8bit':
+        print("Using 8-bit normalization (norm = image / 127.5 - 1.0)")
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: x * 2.0 - 1.0)
         ])
     else:
         transform = transforms.Compose([
@@ -558,7 +592,12 @@ def main():
     
     # Network Initialization
     generator = UNetGenerator(input_nc=1, output_nc=1, img_size=config['img_size'], norm_layer=nn.InstanceNorm2d)
-    discriminator = PatchGANDiscriminator(input_nc=2, n_layers=config.get('n_layers_D', 3), norm_layer=nn.InstanceNorm2d)
+    discriminator = PatchGANDiscriminator(
+        input_nc=2, 
+        n_layers=config.get('n_layers_D', 3), 
+        norm_layer=nn.InstanceNorm2d,
+        non_overlapping_16x16=config.get('non_overlapping_16x16', False)
+    )
     
     # Weights initialization
     generator.apply(init_weights)
@@ -590,10 +629,9 @@ def main():
     
     # Loss functions & Optimizers
     criterion_GAN = nn.BCEWithLogitsLoss()
-    use_L2 = 'lambda_L2' in config
-    criterion_Pixel = nn.MSELoss() if use_L2 else nn.L1Loss()
-    pixel_lambda = config.get('lambda_L2', config.get('lambda_L1', 100.0))
-    pixel_loss_name = "L2Loss (MSE)" if use_L2 else "L1Loss (MAE)"
+    criterion_Pixel = nn.L1Loss(reduction='none')
+    pixel_lambda = config.get('lambda_L1', 100.0)
+    pixel_loss_name = "Spatially Weighted L1Loss (MAE)"
     
     optimizer_G = optim.Adam(generator.parameters(), lr=config['learning_rate'], betas=(config['beta1'], 0.999))
     optimizer_D = optim.Adam(discriminator.parameters(), lr=config['learning_rate'], betas=(config['beta1'], 0.999))
@@ -678,9 +716,10 @@ def main():
             generator.train()
             discriminator.train()
             
-            for idx, (synth_imgs, real_imgs) in enumerate(train_loader):
+            for idx, (synth_imgs, real_imgs, weight_masks) in enumerate(train_loader):
                 synth_imgs = synth_imgs.to(device)
                 real_imgs = real_imgs.to(device)
+                weight_masks = weight_masks.to(device)
                 
                 # ------------------
                 # Train Discriminator
@@ -712,8 +751,8 @@ def main():
                 pred_fake_g = discriminator(fake_pair_g)
                 loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
                 
-                # Pixel-wise loss
-                loss_G_Pixel = criterion_Pixel(fake_imgs, real_imgs) * pixel_lambda
+                # Spatially weighted Pixel-wise loss
+                loss_G_Pixel = (criterion_Pixel(fake_imgs, real_imgs) * weight_masks).mean() * pixel_lambda
                 
                 # Total Generator loss
                 loss_G = loss_G_GAN + loss_G_Pixel
@@ -746,9 +785,10 @@ def main():
             
             with torch.no_grad():
                 for val_batch in test_loader:
-                    val_synth_imgs, val_real_imgs = val_batch
+                    val_synth_imgs, val_real_imgs, val_weight_masks = val_batch
                     val_synth_imgs = val_synth_imgs.to(device)
                     val_real_imgs = val_real_imgs.to(device)
+                    val_weight_masks = val_weight_masks.to(device)
                     
                     # Generate fake images
                     val_fakes = generator(val_synth_imgs)
@@ -767,7 +807,7 @@ def main():
                     val_fake_pair_g = torch.cat([val_synth_imgs, val_fakes], dim=1)
                     pred_fake_g = discriminator(val_fake_pair_g)
                     val_loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
-                    val_loss_G_Pixel = criterion_Pixel(val_fakes, val_real_imgs) * config.get('lambda_L2', config.get('lambda_L1', 100))
+                    val_loss_G_Pixel = (criterion_Pixel(val_fakes, val_real_imgs) * val_weight_masks).mean() * pixel_lambda
                     val_loss_G = val_loss_G_GAN + val_loss_G_Pixel
                     
                     val_g_losses.append(val_loss_G.item())
@@ -791,49 +831,92 @@ def main():
             
             # Periodically save test visuals to MLflow (every 5 epochs)
             if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
-                # Dynamically sample and augment validation priors on-the-fly!
-                test_batch = next(iter(test_loader))
-                test_synth_imgs, test_real_imgs = test_batch
-                test_synth_imgs = test_synth_imgs.to(device)
-                test_real_imgs = test_real_imgs.to(device)
-                
                 generator.eval()
-                with torch.no_grad():
-                    test_fakes = generator(test_synth_imgs)
+                val_comp_dir = "./DATA/val_comparison_set"
+                real_comp_dir = os.path.join(val_comp_dir, "real")
+                lbl_comp_dir = os.path.join(val_comp_dir, "labels")
                 
-                # Log exactly 3 comparison image grid files (each with prior, synthetic fake, real ground truth side by side)
-                for i in range(min(3, len(test_synth_imgs))):
-                    # Move to CPU and handle normalization differences to get approx [0, 1] range
-                    if normalization_type == 'zscore':
-                        mean_s, std_s = test_dataset.synth_mean.item(), test_dataset.synth_std.item()
-                        mean_r, std_r = test_dataset.real_mean.item(), test_dataset.real_std.item()
+                if os.path.exists(real_comp_dir) and os.path.exists(lbl_comp_dir):
+                    filenames = sorted([f for f in os.listdir(real_comp_dir) if f.endswith('.png')])[:3]
+                    for idx_img, fname in enumerate(filenames):
+                        real_path = os.path.join(real_comp_dir, fname)
+                        lbl_path = os.path.join(lbl_comp_dir, fname)
                         
-                        x0_disp = test_synth_imgs[i].squeeze().cpu().numpy() * std_s + mean_s
-                        x1_gen_disp = test_fakes[i].squeeze().cpu().numpy() * std_r + mean_r
-                        x1_gt_disp = test_real_imgs[i].squeeze().cpu().numpy() * std_r + mean_r
-                    else:
-                        # Assuming [-1, 1] minmax from composed transform
-                        x0_disp = (test_synth_imgs[i].squeeze().cpu().numpy() + 1.0) / 2.0
-                        x1_gen_disp = (test_fakes[i].squeeze().cpu().numpy() + 1.0) / 2.0
-                        x1_gt_disp = (test_real_imgs[i].squeeze().cpu().numpy() + 1.0) / 2.0
+                        x1_img = cv2.imread(real_path, cv2.IMREAD_GRAYSCALE)
+                        mask_bgra = cv2.imread(lbl_path, cv2.IMREAD_UNCHANGED)
+                        
+                        if x1_img is None or mask_bgra is None:
+                            continue
+                            
+                        if len(mask_bgra.shape) == 3 and mask_bgra.shape[2] == 3:
+                            alpha = np.full((mask_bgra.shape[0], mask_bgra.shape[1], 1), 255, dtype=np.uint8)
+                            mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
+                            
+                        # Synthesize prior image with gamma=1.0 for a clean prior
+                        x0_img = synthesize_from_mask(mask_bgra, min_gamma=1.0, max_gamma=1.0)
+                        
+                        # Resize to config['img_size']
+                        target_size = (config['img_size'], config['img_size'])
+                        x0_img = cv2.resize(x0_img, target_size, interpolation=cv2.INTER_LINEAR)
+                        x1_img = cv2.resize(x1_img, target_size, interpolation=cv2.INTER_LINEAR)
+                        
+                        # Apply 8bit or minmax transform
+                        if normalization_type == '8bit':
+                            x0 = (x0_img.astype(np.float32) / 127.5) - 1.0
+                            x1 = (x1_img.astype(np.float32) / 127.5) - 1.0
+                        else:
+                            x0 = (x0_img.astype(np.float32) / 255.0) * 2.0 - 1.0
+                            x1 = (x1_img.astype(np.float32) / 255.0) * 2.0 - 1.0
+                            
+                        x0_tensor = torch.from_numpy(x0).unsqueeze(0).unsqueeze(0).to(device)
+                        x1_tensor = torch.from_numpy(x1).unsqueeze(0).unsqueeze(0).to(device)
+                        
+                        with torch.no_grad():
+                            test_fake = generator(x0_tensor)
+                            
+                        # Reverse normalization for displaying
+                        if normalization_type == '8bit':
+                            x0_disp = (x0_tensor[0].squeeze().cpu().numpy() + 1.0) * 127.5
+                            x1_gen_disp = (test_fake[0].squeeze().cpu().numpy() + 1.0) * 127.5
+                            x1_gt_disp = (x1_tensor[0].squeeze().cpu().numpy() + 1.0) * 127.5
+                            x0_disp = np.clip(x0_disp / 255.0, 0.0, 1.0)
+                            x1_gen_disp = np.clip(x1_gen_disp / 255.0, 0.0, 1.0)
+                            x1_gt_disp = np.clip(x1_gt_disp / 255.0, 0.0, 1.0)
+                        else:
+                            x0_disp = (x0_tensor[0].squeeze().cpu().numpy() + 1.0) / 2.0
+                            x1_gen_disp = (test_fake[0].squeeze().cpu().numpy() + 1.0) / 2.0
+                            x1_gt_disp = (x1_tensor[0].squeeze().cpu().numpy() + 1.0) / 2.0
+                            
+                        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+                        titles = ["Prior (Synthetic Mask)", "Generated Synthesis", "Ground Truth (Real)"]
+                        images = [x0_disp, x1_gen_disp, x1_gt_disp]
 
-                    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-                    titles = ["Prior (Synthetic Mask)", "Generated Synthesis", "Ground Truth (Real)"]
-                    images = [x0_disp, x1_gen_disp, x1_gt_disp]
+                        for ax, title, img in zip(axes, titles, images):
+                            ax.set_title(title, fontsize=14, fontweight='bold', pad=10)
+                            ax.imshow(img, cmap='gray')
+                            ax.axis('off')
 
-                    for ax, title, img in zip(axes, titles, images):
-                        ax.set_title(title, fontsize=14, fontweight='bold', pad=10)
-                        ax.imshow(img, cmap='gray')
-                        ax.axis('off')
-
-                    plt.tight_layout()
-                    mlflow.log_figure(fig, f"validation_grids/epoch_{epoch+1}_sample_{i+1}.png")
-                    plt.close(fig)
+                        plt.tight_layout()
+                        mlflow.log_figure(fig, f"validation_grids/epoch_{epoch+1}_sample_{idx_img+1}.png")
+                        plt.close(fig)
                     
         # Log models at the end of the run
         gen_to_log = generator.module if isinstance(generator, nn.DataParallel) else generator
         disc_to_log = discriminator.module if isinstance(discriminator, nn.DataParallel) else discriminator
-        mlflow.pytorch.log_model(gen_to_log, "generator_model", serialization_format="pickle")
+        try:
+            model_reg_name = "Pix2Pix_16x16_NonOverlap_Generator" if config.get('non_overlapping_16x16', False) else "Pix2Pix_8BitNorm_Generator"
+            print(f"Registering generator model as '{model_reg_name}'...")
+            mlflow.pytorch.log_model(
+                gen_to_log, 
+                "generator_model", 
+                serialization_format="pickle",
+                registered_model_name=model_reg_name
+            )
+        except Exception as e:
+            print(f"Warning: Could not register model directly: {e}")
+            print("Logging generator model without registration...")
+            mlflow.pytorch.log_model(gen_to_log, "generator_model", serialization_format="pickle")
+            
         mlflow.pytorch.log_model(disc_to_log, "discriminator_model", serialization_format="pickle")
         print("Training completed and logged successfully.")
 

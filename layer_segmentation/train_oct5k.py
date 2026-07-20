@@ -1,4 +1,13 @@
+import sys
 import os
+# Pre-scan arguments for --gpu to set CUDA_VISIBLE_DEVICES before torch is imported
+for i, arg in enumerate(sys.argv):
+    if arg == '--gpu' and i + 1 < len(sys.argv):
+        os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[i+1]
+        print(f"Forced CUDA_VISIBLE_DEVICES to {sys.argv[i+1]} from CLI")
+        break
+
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -37,38 +46,55 @@ def train():
     parser = argparse.ArgumentParser(description="Train RETFound Segmenter on OCT5k")
     parser.add_argument('--data_dir', type=str, required=True, help="Path to the root of the split dataset")
     parser.add_argument('--weights_path', type=str, default="./RETFound_oct_weights.pth", help="Path to RETFound weights")
+    parser.add_argument('--freeze_backbone', action='store_true', help="Freeze RETFound encoder weights")
+    parser.add_argument('--run_name', type=str, default="RETFound_OCT5k", help="MLflow run name")
+    parser.add_argument('--use_augmentations', action='store_true', help="Apply Albumentations data augmentation")
+    parser.add_argument('--img_size', type=int, default=224, help="Input image size for model and transforms")
+    parser.add_argument('--gpu', type=str, default=None, help="GPU index to force-bind training process")
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
     # 1. Prepare Data
-    train_dataset = OCT5kDataset(image_dir=f'{args.data_dir}/train/images', mask_dir=f'{args.data_dir}/train/masks')
-    val_dataset = OCT5kDataset(image_dir=f'{args.data_dir}/test/images', mask_dir=f'{args.data_dir}/test/masks')
+    train_dataset = OCT5kDataset(
+        image_dir=f'{args.data_dir}/train/images', 
+        mask_dir=f'{args.data_dir}/train/masks',
+        img_size=args.img_size,
+        use_augmentations=args.use_augmentations
+    )
+    val_dataset = OCT5kDataset(
+        image_dir=f'{args.data_dir}/test/images', 
+        mask_dir=f'{args.data_dir}/test/masks',
+        img_size=args.img_size,
+        use_augmentations=False
+    )
     
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
 
     # 2. Initialize Model
-    model = RETFoundSegmenter(num_classes=NUM_CLASSES, pretrained_path=args.weights_path)
+    model = RETFoundSegmenter(num_classes=NUM_CLASSES, img_size=args.img_size, pretrained_path=args.weights_path)
     
-    # Enable Multi-GPU if available
-    if torch.cuda.device_count() > 1:
-        print(f"Let's use {torch.cuda.device_count()} GPUs!")
-        model = nn.DataParallel(model)
+    if args.freeze_backbone:
+        for param in model.encoder.parameters():
+            param.requires_grad = False
+        print("Froze RETFound encoder backbone weights.")
         
     model = model.to(device)
 
     # 3. Loss & Optimizer
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
+    # Filter optimizer parameters to only include those requiring gradients
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = optim.AdamW(trainable_params, lr=LEARNING_RATE, weight_decay=1e-4)
     scaler = torch.cuda.amp.GradScaler() # For Mixed Precision
     
     # MLflow tracking
     mlflow.set_tracking_uri("http://10.24.38.15:5000")
     mlflow.set_experiment("OCT5k_Segmentation")
 
-    with mlflow.start_run():
+    with mlflow.start_run(run_name=args.run_name):
         mlflow.log_params({
             "BATCH_SIZE": BATCH_SIZE,
             "EPOCHS": EPOCHS,
@@ -146,11 +172,12 @@ def train():
                             axes[2, j].axis('off')
                         
                         plt.tight_layout()
-                        grid_path = f"val_grid_epoch_{epoch+1}.png"
+                        grid_path = f"val_grid_{args.run_name}_epoch_{epoch+1}.png"
                         plt.savefig(grid_path)
                         mlflow.log_artifact(grid_path, artifact_path="validation_grids")
                         plt.close(fig)
-                        os.remove(grid_path) # Clean up local image
+                        if os.path.exists(grid_path):
+                            os.remove(grid_path) # Clean up local image
                         
             avg_val_loss = val_loss / len(val_loader)
             avg_val_dice = val_dice_total / len(val_loader)
@@ -168,9 +195,16 @@ def train():
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 model_to_save = model.module if hasattr(model, 'module') else model
-                torch.save(model_to_save.state_dict(), "best_oct5k_retfound_model.pth")
-                mlflow.log_artifact("best_oct5k_retfound_model.pth", artifact_path="checkpoints")
-                print("Saved new best model!")
+                checkpoint_name = f"{args.run_name}_best_model.pth"
+                torch.save(model_to_save.state_dict(), checkpoint_name)
+                # Flush OS filesystem caches and sleep to ensure NFS consistency before MLflow upload
+                try:
+                    os.sync()
+                except:
+                    pass
+                time.sleep(5)
+                mlflow.log_artifact(checkpoint_name, artifact_path="checkpoints")
+                print(f"Saved new best model as {checkpoint_name}!")
 
 if __name__ == "__main__":
     train()

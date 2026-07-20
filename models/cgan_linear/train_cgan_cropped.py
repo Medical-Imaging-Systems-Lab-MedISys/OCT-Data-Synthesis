@@ -187,8 +187,10 @@ class NR206DynamicDataset(Dataset):
         real_path = os.path.join(self.real_dir, fname)
         
         x1_img = cv2.imread(real_path, cv2.IMREAD_GRAYSCALE)
-        clean_patch = x1_img[350:, 600:]
-        x1_img[350:, :150] = np.flip(clean_patch, axis=1)
+        # Remove watermark dynamically in RAM if dimensions are compatible
+        if x1_img is not None and x1_img.shape[0] >= 500 and x1_img.shape[1] >= 750:
+            clean_patch = x1_img[350:, 600:]
+            x1_img[350:, :150] = np.flip(clean_patch, axis=1)
             
         mask_bgra = cv2.imread(lbl_path, cv2.IMREAD_UNCHANGED)
         if len(mask_bgra.shape) == 3 and mask_bgra.shape[2] == 3:
@@ -297,13 +299,17 @@ def train():
     mlflow.set_tracking_uri(CONFIG["mlflow_tracking_uri"])
     mlflow.set_experiment(CONFIG["experiment_name"])
     
-    local_data_dir = os.environ.get("LOCAL_DATA_DIR", "NR206")
+    train_labels = "./DATA/combined_synthesis_data/masks"
+    train_real = "./DATA/combined_synthesis_data/real"
+    val_labels = "./DATA/NR206/test_labels"
+    val_real = "./DATA/NR206/test"
+
     train_loader = DataLoader(
-        NR206DynamicDataset(os.path.join(local_data_dir, "train_labels"), os.path.join(local_data_dir, "train"), CONFIG["image_size"]),
+        NR206DynamicDataset(train_labels, train_real, CONFIG["image_size"]),
         batch_size=CONFIG["batch_size"], shuffle=True, num_workers=4, pin_memory=True
     )
     val_loader = DataLoader(
-        NR206DynamicDataset(os.path.join(local_data_dir, "test_labels"), os.path.join(local_data_dir, "test"), CONFIG["image_size"]),
+        NR206DynamicDataset(val_labels, val_real, CONFIG["image_size"]),
         batch_size=1, shuffle=False, num_workers=2
     )
 
@@ -356,7 +362,7 @@ def train():
                 netG.zero_grad()
                 pred_fake_g = netD(x0_prior, x1_fake)
                 loss_G_GAN = criterion_GAN(pred_fake_g, torch.ones_like(pred_fake_g))
-                loss_G_Pixel = criterion_Pixel(x1_fake, x1_real) * CONFIG["lambda_L1"] # Using same lambda weight
+                loss_G_Pixel = criterion_Pixel(x1_fake, x1_real) * CONFIG["lambda_L1"]
                 loss_G = loss_G_GAN + loss_G_Pixel
 
                 loss_G.backward()
@@ -374,20 +380,46 @@ def train():
             # --- Validation & Plotting ---
             if epoch % CONFIG["val_check_interval"] == 0 or epoch == 1:
                 netG.eval()
-                logged_images = 0
-                with torch.no_grad():
-                    for batch_idx, (val_x0, val_x1) in enumerate(val_loader):
-                        if logged_images >= CONFIG["num_val_images"]: break
+                val_comp_dir = "./DATA/val_comparison_set"
+                real_comp_dir = os.path.join(val_comp_dir, "real")
+                lbl_comp_dir = os.path.join(val_comp_dir, "labels")
+                
+                if os.path.exists(real_comp_dir) and os.path.exists(lbl_comp_dir):
+                    filenames = sorted([f for f in os.listdir(real_comp_dir) if f.endswith('.png')])[:CONFIG["num_val_images"]]
+                    for idx_img, fname in enumerate(filenames):
+                        real_path = os.path.join(real_comp_dir, fname)
+                        lbl_path = os.path.join(lbl_comp_dir, fname)
                         
-                        val_x0, val_x1 = val_x0.to(device), val_x1.to(device)
+                        x1_img = cv2.imread(real_path, cv2.IMREAD_GRAYSCALE)
+                        mask_bgra = cv2.imread(lbl_path, cv2.IMREAD_UNCHANGED)
+                        
+                        if x1_img is None or mask_bgra is None:
+                            continue
+                            
+                        if len(mask_bgra.shape) == 3 and mask_bgra.shape[2] == 3:
+                            alpha = np.full((mask_bgra.shape[0], mask_bgra.shape[1], 1), 255, dtype=np.uint8)
+                            mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
+                            
+                        x0_img = synthesize_from_mask(mask_bgra, min_gamma=1.0, max_gamma=1.0)
+                        
+                        target_size = (CONFIG['image_size'], CONFIG['image_size'])
+                        x0_img = cv2.resize(x0_img, target_size, interpolation=cv2.INTER_LINEAR)
+                        x1_img = cv2.resize(x1_img, target_size, interpolation=cv2.INTER_LINEAR)
+                        
+                        x0 = (x0_img.astype(np.float32) / 127.5) - 1.0
+                        x1 = (x1_img.astype(np.float32) / 127.5) - 1.0
+                        
+                        val_x0 = torch.from_numpy(x0).unsqueeze(0).unsqueeze(0).to(device)
+                        val_x1 = torch.from_numpy(x1).unsqueeze(0).unsqueeze(0).to(device)
+                        
                         val_noise = torch.randn(1, CONFIG["noise_dim"], CONFIG["image_size"], CONFIG["image_size"], device=device)
-                        val_fake = netG(val_x0, val_noise)
-                        
-                        # Un-normalize to [0, 1]
+                        with torch.no_grad():
+                            val_fake = netG(val_x0, val_noise)
+                            
                         x0_disp = (val_x0[0].squeeze().cpu().numpy() + 1.0) / 2.0
                         x1_gen_disp = (val_fake[0].squeeze().cpu().numpy() + 1.0) / 2.0
                         x1_gt_disp = (val_x1[0].squeeze().cpu().numpy() + 1.0) / 2.0
-
+                        
                         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
                         titles = ["Prior (Synthetic)", "Generated (cGAN)", "Ground Truth"]
                         for ax, title, img in zip(axes, titles, [x0_disp, x1_gen_disp, x1_gt_disp]):
@@ -396,9 +428,8 @@ def train():
                             ax.axis('off')
                         
                         plt.tight_layout()
-                        mlflow.log_figure(fig, f"validation_grids/epoch_{epoch}_sample_{batch_idx}.png")
+                        mlflow.log_figure(fig, f"validation_grids/epoch_{epoch}_sample_{idx_img}.png")
                         plt.close(fig)
-                        logged_images += 1
 
         torch.save(netG.state_dict(), "cgan_generator.pth")
         mlflow.log_artifact("cgan_generator.pth")

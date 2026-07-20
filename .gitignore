@@ -73,3 +73,10 @@ conditional-flow-matching/checkpoints/
 /Duke DME Chiu 2015
 /Kaggle Retinal Segmentation Dataset
 /OCTID
+
+# Data and Models
+DATA/
+downloaded_models/
+label_selection_state.json
+__pycache__/
+*.log

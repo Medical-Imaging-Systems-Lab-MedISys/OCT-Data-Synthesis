@@ -43,18 +43,21 @@ except ImportError:
 # 1. Configuration & Hyperparameters
 # ==========================================
 CONFIG = {
-    "experiment_name": "Exp12_CFM_Base",
-    "run_name": f"cfm_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_exp1",
+    "experiment_name": "OCT_CFM_8BitNorm",
+    "run_name": f"cfm_8bitnorm_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
+    "loss_type": "l2",  # Set to "l1" or "l2"
     "mlflow_tracking_uri": "http://10.24.38.15:5000",
     "batch_size": 16,
-    "epochs": 100,
+    "epochs": 300,
     "learning_rate": 0.0002,
     "image_size": 256,         # Adjust to your OCT dimensions (e.g., 256 or 512)
     "channels": 1,             # Grayscale OCT
-    "val_check_interval": 5,   # Log images every 5 epochs
-    "num_val_images": 3,       # Exactly 3 image grids per logging
-    "inference_steps": 50,     # ODE Solver steps
-    "sigma": 0.0               # Deterministic path for paired data
+    "val_check_interval": 5,   # Run validation every N epochs
+    "num_val_images": 3,       # Number of validation images to log as grids
+    "inference_steps": 50,     # ODE solver steps for inference/generation
+    "sigma": 0.0,              # Noise level in flow matching (0.0 = deterministic)
+    "w_bg": 0.4,
+    "w_layers": 1.0,
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -117,11 +120,13 @@ def log_validation_grids(x0, x1_gen, x1_gt, epoch, batch_idx):
 # 1. Image Synthesis Helpers (Dynamic Prior Generation)
 # =====================================================================
 
-def sample_gamma_from_bell_curve(min_g, max_g):
+def sample_gamma_from_bell_curve(min_g, max_g, rng=None):
     """
     Samples a gamma value from a normal (bell-curve) distribution
     centered between min_g and max_g, and truncated to those bounds.
     """
+    if rng is None:
+        rng = np.random.RandomState()
     mean = (min_g + max_g) / 2.0
     std = (max_g - min_g) / 6.0
     return np.clip(rng.normal(mean, std), min_g, max_g)
@@ -134,6 +139,7 @@ def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensi
     Synthesizes a realistic-looking synthetic OCT image (with speckle noise)
     directly from a BGRA layer segmentation mask.
     """
+    rng = np.random.RandomState()
     height, width, _ = mask_bgra.shape
     raw_img = np.zeros((height, width), dtype=np.float32)
     
@@ -255,6 +261,15 @@ class NR206DynamicDataset(Dataset):
             alpha = np.full((mask_bgra.shape[0], mask_bgra.shape[1], 1), 255, dtype=np.uint8)
             mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
             
+        # Resize to 256x256 to ensure matching tensor sizes for batching
+        mask_bgra = cv2.resize(mask_bgra, (256, 256), interpolation=cv2.INTER_NEAREST)
+        x1_img = cv2.resize(x1_img, (256, 256), interpolation=cv2.INTER_LINEAR)
+
+        # Compute spatial loss weighting mask (non-background pixels)
+        bg_pixels = (mask_bgra[:, :, :3] == 0).all(axis=2)
+        layer_mask = (~bg_pixels).astype(np.float32)  # 1.0 for layers, 0.0 for background
+        layer_mask_tensor = torch.from_numpy(layer_mask).unsqueeze(0)
+
         # 3. Dynamically Generate Synthetic Prior (x0)
         # Unique noise generation for this specific iteration
         x0_img = synthesize_from_mask(mask_bgra, self.min_gamma, self.max_gamma)
@@ -267,7 +282,7 @@ class NR206DynamicDataset(Dataset):
         x0_tensor = torch.from_numpy(x0).unsqueeze(0)
         x1_tensor = torch.from_numpy(x1).unsqueeze(0)
         
-        return x0_tensor, x1_tensor
+        return x0_tensor, x1_tensor, layer_mask_tensor
 
 # ==========================================
 # 4. Main Training Routine
@@ -276,6 +291,8 @@ def train():
     # Set up MLflow
     mlflow.set_tracking_uri(CONFIG["mlflow_tracking_uri"])
     mlflow.set_experiment(CONFIG["experiment_name"])
+
+    local_data_dir = os.environ.get("LOCAL_DATA_DIR", "./NR206")
 
     train_dataset = NR206DynamicDataset(
         labels_dir=os.path.join(local_data_dir, "train_labels"), 
@@ -292,6 +309,21 @@ def train():
         num_workers=6,       
         pin_memory=True,     
         prefetch_factor=2    
+    )
+
+    val_dataset = NR206DynamicDataset(
+        labels_dir=os.path.join(local_data_dir, "test_labels"), 
+        real_dir=os.path.join(local_data_dir, "test"),
+        min_gamma=0.5,
+        max_gamma=1.5
+    )
+
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=1,        # Batch size 1 makes validation image logging clean and isolated
+        shuffle=False, 
+        num_workers=2,       
+        pin_memory=True
     )
 
     # Initialize Model (Vector Field Network)
@@ -315,8 +347,11 @@ def train():
     print(f"Starting training on {device}...")
 
     with mlflow.start_run(run_name=CONFIG.get("run_name")):
-        # Log all configuration parameters
+        # Log all configuration parameters and metadata tags
         mlflow.log_params(CONFIG)
+        mlflow.set_tag("normalization", "8-bit")
+        mlflow.set_tag("loss_weighting", f"w_bg = {CONFIG['w_bg']}, w_layers = {CONFIG['w_layers']}")
+        mlflow.set_tag("mlflow.note.content", f"CFM training run with 8-bit normalization, spatial loss weighting (w_bg = {CONFIG['w_bg']}, w_layers = {CONFIG['w_layers']}), validation run every epoch, and visual grid logging every {CONFIG['val_check_interval']} epochs.")
 
         global_step = 0
 
@@ -325,8 +360,8 @@ def train():
             total_train_loss = 0.0
             
             pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{CONFIG['epochs']}")
-            for x0, x1 in pbar:
-                x0, x1 = x0.to(device), x1.to(device)
+            for x0, x1, layer_mask in pbar:
+                x0, x1, layer_mask = x0.to(device), x1.to(device), layer_mask.to(device)
                 optimizer.zero_grad()
 
                 # torchcfm handles the time sampling and target velocity calculation
@@ -336,8 +371,10 @@ def train():
                 # Model predicts the velocity field
                 v_pred = model(x_t, t.squeeze()).sample
                 
-                # Flow Matching Objective: Match predicted velocity to target velocity
-                loss = F.mse_loss(v_pred, u_t)
+                # Flow Matching Objective: Match predicted velocity to target velocity with spatial loss weighting
+                loss_map = (v_pred - u_t) ** 2
+                weight_map = layer_mask * CONFIG["w_layers"] + (1.0 - layer_mask) * CONFIG["w_bg"]
+                loss = (loss_map * weight_map).mean()
                 
                 loss.backward()
                 optimizer.step()
@@ -361,13 +398,15 @@ def train():
                 logged_images_count = 0
 
                 with torch.no_grad():
-                    for batch_idx, (val_x0, val_x1) in enumerate(val_loader):
-                        val_x0, val_x1 = val_x0.to(device), val_x1.to(device)
+                    for batch_idx, (val_x0, val_x1, val_layer_mask) in enumerate(val_loader):
+                        val_x0, val_x1, val_layer_mask = val_x0.to(device), val_x1.to(device), val_layer_mask.to(device)
 
                         # Compute Validation Loss (MSE of vector field)
                         t, x_t, u_t = FM.sample_location_and_conditional_flow(val_x0, val_x1)
                         v_pred = model(x_t, t.squeeze()).sample
-                        val_loss = F.mse_loss(v_pred, u_t)
+                        val_loss_map = (v_pred - u_t) ** 2
+                        val_weight_map = val_layer_mask * CONFIG["w_layers"] + (1.0 - val_layer_mask) * CONFIG["w_bg"]
+                        val_loss = (val_loss_map * val_weight_map).mean()
                         total_val_loss += val_loss.item()
 
                         # Image Generation & Logging (Only log up to num_val_images)
@@ -390,9 +429,17 @@ def train():
                 mlflow.log_metric("val_loss_epoch", avg_val_loss, step=epoch)
                 print(f"Epoch {epoch} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-        # Optional: Save final model checkpoint to MLflow
-        # torch.save(model.state_dict(), "final_model.pth")
-        # mlflow.log_artifact("final_model.pth")
+        # Save final model checkpoint to checkpoints/ and log to MLflow
+        os.makedirs("checkpoints", exist_ok=True)
+        checkpoint_path = f"checkpoints/cfm_model_{CONFIG['run_name']}.pt"
+        torch.save(model.state_dict(), checkpoint_path)
+        print(f"Model saved to {checkpoint_path}")
+        try:
+            mlflow.log_artifact(checkpoint_path, artifact_path="checkpoints")
+            mlflow.pytorch.log_model(model, "model", registered_model_name="CFM_8BitNorm_Model")
+            print("Successfully registered model in MLflow Model Registry under CFM_8BitNorm_Model")
+        except Exception as e:
+            print(f"Warning: Failed to log artifact / register model to MLflow: {e}")
 
 if __name__ == "__main__":
     train()

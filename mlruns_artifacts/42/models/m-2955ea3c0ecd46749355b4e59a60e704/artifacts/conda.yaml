@@ -1,0 +1,26 @@
+channels:
+- conda-forge
+dependencies:
+- python=3.10.20
+- pip<=26.1.2
+- pip:
+  - mlflow==3.14.0
+  - accelerate==1.13.0
+  - backports-zstd==1.5.0
+  - cloudpickle==3.1.2
+  - defusedxml==0.7.1
+  - dill==0.4.1
+  - einops==0.8.2
+  - gmpy2==2.3.0
+  - matplotlib==3.10.9
+  - numpy==2.2.6
+  - omegaconf==2.3.1
+  - open-clip-torch==3.3.0
+  - pandas==2.3.3
+  - pytorch-lightning==2.6.5
+  - rich==15.0.0
+  - scipy==1.15.3
+  - torch==2.7.1
+  - transformers==4.46.3
+  - wandb==0.27.2
+name: mlflow-env

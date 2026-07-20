@@ -553,7 +553,7 @@ def train():
         # 2. Register model to MLflow Model Registry
         try:
             print("Registering model to MLflow DAGsHub registry (this may take a moment)...")
-            mlflow.pytorch.log_model(model, artifact_path="cfm_model", registered_model_name=CONFIG["experiment_name"])
+            mlflow.pytorch.log_model(model, artifact_path="cfm_model", registered_model_name=CONFIG["experiment_name"], serialization_format="pickle")
             print("Model successfully registered to MLflow.")
         except Exception as e:
             print(f"Failed to log model to MLflow registry (could be a DAGsHub timeout/size limit): {e}")

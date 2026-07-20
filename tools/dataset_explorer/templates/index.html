@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dataset Explorer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <h2>Explorer</h2>
+                <p>Dataset Analysis</p>
+            </div>
+            <ul id="dataset-list" class="dataset-list">
+                <!-- Datasets populated via JS -->
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-nav glass-panel">
+                <h1 id="current-dataset-title">Select a Dataset</h1>
+                <div class="nav-actions">
+                    <button class="action-btn" id="theme-toggle">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <div class="content-scroll">
+                <div id="dataset-view" class="dataset-view hidden">
+                    <!-- Dynamic Tree Content will be injected here -->
+                </div>
+                
+                <div id="empty-state" class="empty-state">
+                    <div class="orb"></div>
+                    <h2>Explore the Universe of Data</h2>
+                    <p>Select a dataset from the sidebar to begin your journey.</p>
+                </div>
+                <div id="loading-state" class="empty-state hidden">
+                    <div class="spinner"></div>
+                    <h2>Loading Dataset...</h2>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

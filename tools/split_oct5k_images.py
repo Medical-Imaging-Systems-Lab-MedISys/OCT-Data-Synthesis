@@ -3,8 +3,10 @@ import glob
 import shutil
 
 # Paths
-source_images_dir = "/home/mmk/Codes/oct_data_synthesis/DATA/OCT5k/Images"
-split_dir = "/home/mmk/Codes/oct_data_synthesis/DATA/OCT5k_split"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+source_images_dir = os.path.join(project_root, "DATA", "OCT5k", "Images")
+split_dir = os.path.join(project_root, "DATA", "OCT5k", "OCT5k_split")
 
 def main():
     if not os.path.exists(source_images_dir):
@@ -22,8 +24,11 @@ def main():
     lookup_table = {}
     for img_path in all_images:
         rel_path = os.path.relpath(img_path, source_images_dir)
-        unique_name = rel_path.replace(os.path.sep, "_")
-        lookup_table[unique_name] = img_path
+        parts = rel_path.split(os.path.sep)
+        # Strip off the top-level directory (e.g. Images_Automatic, Images_Manual, Images_Original)
+        if len(parts) > 1:
+            unique_name = "_".join(parts[1:])
+            lookup_table[unique_name] = img_path
 
     print(f"Indexed {len(lookup_table)} original images.")
 

@@ -12,6 +12,8 @@ import mlflow
 from oct_controlnet_dataset import OCTControlNetDataset
 from cldm.logger import ImageLogger
 from cldm.model import create_model, load_state_dict
+from cldm.cldm import ControlLDM
+import torch.nn.functional as F
 
 # -------------------------------------------------------------------
 # Global Seeding for Reproducibility
@@ -97,7 +99,7 @@ class MLflowValidationLogger(pl.Callback):
         )
 
         # Prior (hint)
-        hint_tensor = images.get("control", batch["hint"])[0]
+        hint_tensor = batch["hint"][0]
 
         # Ground truth
         gt_tensor = images.get("reconstruction", batch["jpg"])[0]
@@ -112,17 +114,15 @@ class MLflowValidationLogger(pl.Callback):
 
         def tensor_to_numpy(img):
             img = img.detach().cpu()
-
-            # CHW -> HWC
-            img = img.permute(1, 2, 0).numpy()
-
+            if img.ndim == 3:
+                if img.shape[0] in [1, 3]:
+                    img = img.permute(1, 2, 0)
+            img = img.numpy()
             # [-1,1] -> [0,1]
             img = np.clip((img + 1.0) / 2.0, 0, 1)
-
             # Convert grayscale
             if img.shape[-1] == 1:
                 img = img.squeeze(-1)
-
             return img
 
         hint = tensor_to_numpy(hint_tensor)
@@ -161,6 +161,78 @@ class MLflowValidationLogger(pl.Callback):
         plt.close(fig)
 
 # ==========================================
+# Spatial Weighted ControlLDM Subclass
+# ==========================================
+def default(val, d):
+    if val is not None:
+        return val
+    return d() if callable(d) else d
+
+class SpatialWeightedControlLDM(ControlLDM):
+    def training_step(self, batch, batch_idx):
+        self._current_bg_mask = batch.get("bg_mask")
+        return super().training_step(batch, batch_idx)
+
+    def validation_step(self, batch, batch_idx):
+        self._current_bg_mask = batch.get("bg_mask")
+        return super().validation_step(batch, batch_idx)
+
+    def p_losses(self, x_start, cond, t, noise=None):
+        noise = default(noise, lambda: torch.randn_like(x_start))
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        model_output = self.apply_model(x_noisy, t, cond)
+
+        loss_dict = {}
+        prefix = 'train' if self.training else 'val'
+
+        if self.parameterization == "x0":
+            target = x_start
+        elif self.parameterization == "eps":
+            target = noise
+        elif self.parameterization == "v":
+            target = self.get_v(x_start, noise, t)
+        else:
+            raise NotImplementedError()
+
+        # Calculate elementwise loss (mean=False returns reduction='none' for l2 or abs for l1)
+        loss_elementwise = self.get_loss(model_output, target, mean=False) # shape [B, C, H, W]
+
+        # Apply spatial loss weighting if mask is available
+        bg_mask = getattr(self, "_current_bg_mask", None)
+        if bg_mask is not None:
+            if bg_mask.ndim == 3:
+                bg_mask = bg_mask.unsqueeze(1) # shape [B, 1, H, W]
+            
+            latent_h, latent_w = loss_elementwise.shape[2], loss_elementwise.shape[3]
+            # Downsample using bilinear interpolation
+            bg_mask_down = F.interpolate(bg_mask, size=(latent_h, latent_w), mode='bilinear', align_corners=False)
+            
+            # w_bg = 0.4 on background (where mask=1.0), 1.0 on layers (where mask=0.0)
+            # weight = mask_down * 0.4 + (1 - mask_down) * 1.0 = 1.0 - 0.6 * mask_down
+            weight = 1.0 - 0.6 * bg_mask_down
+            loss_elementwise = loss_elementwise * weight
+
+        loss_simple = loss_elementwise.mean([1, 2, 3])
+        loss_dict.update({f'{prefix}/loss_simple': loss_simple.mean()})
+
+        logvar_t = self.logvar[t].to(self.device)
+        loss = loss_simple / torch.exp(logvar_t) + logvar_t
+        if self.learn_logvar:
+            loss_dict.update({f'{prefix}/loss_gamma': loss.mean()})
+            loss_dict.update({'logvar': self.logvar.data.mean()})
+
+        loss = self.l_simple_weight * loss.mean()
+
+        # Weight VLB loss as well
+        loss_vlb = loss_elementwise.mean(dim=(1, 2, 3))
+        loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
+        loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
+        loss += (self.original_elbo_weight * loss_vlb)
+        loss_dict.update({f'{prefix}/loss': loss})
+
+        return loss, loss_dict
+
+# ==========================================
 # Main Training Pipeline
 # ==========================================
 def main():
@@ -170,17 +242,17 @@ def main():
                         help='Flag to indicate training the ControlNet branch entirely from scratch.')
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--image_size', type=int, default=256)
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=300)
     args = parser.parse_args()
 
     # Define Data Directories (From NVMe staging /tmp)
     local_data_dir = os.environ.get("LOCAL_DATA_DIR", "./NR206")
 
-    train_real = os.path.join(local_data_dir, "train")
-    train_labels = os.path.join(local_data_dir, "train_labels")
+    train_real = os.environ.get("TRAIN_REAL", os.path.join(local_data_dir, "train"))
+    train_labels = os.environ.get("TRAIN_LABELS", os.path.join(local_data_dir, "train_labels"))
 
-    val_real = os.path.join(local_data_dir, "test")
-    val_labels = os.path.join(local_data_dir, "test_labels")
+    val_real = os.environ.get("VAL_REAL", os.path.join(local_data_dir, "test"))
+    val_labels = os.environ.get("VAL_LABELS", os.path.join(local_data_dir, "test_labels"))
 
     train_dataset = OCTControlNetDataset(
         labels_dir=train_labels,
@@ -221,13 +293,40 @@ def main():
 
     # MLflow Setup
     mlflow_uri = "http://10.24.38.15:5000"
-    experiment_name = "Exp14_ControlNet_OCT"
+    experiment_name = "OCT_ControlNet_8BitNorm"
     mode_str = "Scratch" if args.train_from_scratch else "Pretrained"
     run_name = f"ControlNet_{mode_str}_OCT_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}"
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment(experiment_name)
     
     with mlflow.start_run(run_name=run_name):
+        # Set details tags & run description note
+        mlflow.set_tags({
+            "model_type": "ControlNet",
+            "initialization": mode_str,
+            "epochs": str(args.epochs),
+            "batch_size": str(args.batch_size),
+            "image_size": str(args.image_size),
+            "normalization": "8-bit (-1 to 1)",
+            "loss_weighting": "Spatial loss weighting (w_bg=0.4, w_layer=1.0)"
+        })
+        
+        mlflow.set_tag("mlflow.note.content", f"""
+# OCT ControlNet Retraining with 8-Bit Normalization and Spatial Loss Weighting
+- **Experiment:** OCT_ControlNet_8BitNorm
+- **Date/Time:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+- **Base Checkpoint:** {args.checkpoint}
+- **Training Type:** {mode_str}
+- **Hyperparameters:**
+  - Batch Size: {args.batch_size}
+  - Image Size: {args.image_size}
+  - Epochs: {args.epochs}
+  - Learning Rate: 1e-5
+- **Key Enhancements:**
+  1. 8-Bit Normalization on both Hint (Prior) and Target (Real OCT) to range [-1.0, 1.0] (norm = image / 127.5 - 1.0).
+  2. Spatial loss weighting: w_bg = 0.4 on background regions, 1.0 on layers. The background mask is obtained where mask B=G=R=0, and downsampled to 32x32 to match the latent space dimensions before weighting the simple latent diffusion loss.
+""")
+
         mlf_logger = MLFlowLogger(
             experiment_name=experiment_name,
             tracking_uri=mlflow_uri,
@@ -236,6 +335,7 @@ def main():
 
         # Initialize Base Model Architecture
         model = create_model('./ControlNet/models/cldm_v15.yaml').cpu()
+        model.__class__ = SpatialWeightedControlLDM
         
         if args.train_from_scratch:
             print("Initializing ControlNet from scratch. Loading base SD1.5 initial weights...")
@@ -262,7 +362,7 @@ def main():
 
         mlflow_val_logger = MLflowValidationLogger(
             val_batches=fixed_validation_batches,
-            every_n_epochs=20,
+            every_n_epochs=5,
             max_images=3
         )
 
@@ -287,7 +387,7 @@ def main():
         )
 
         print(f"Starting {mode_str} ControlNet training.")
-        trainer.fit(model, train_loader)
+        trainer.fit(model, train_loader, val_loader)
         
         # Log only the final trained model to MLflow
         final_ckpt_path = "./ControlNet/checkpoints/controlnet_final.ckpt"
@@ -296,6 +396,23 @@ def main():
         print("Uploading final model to MLflow (this may take a few minutes)...")
         mlflow.log_artifact(final_ckpt_path, artifact_path="checkpoints")
         print("Upload complete!")
+        
+        # Register the model at the end of the run
+        print("Registering model in MLflow Model Registry...")
+        try:
+            mlflow.pytorch.log_model(
+                pytorch_model=model,
+                artifact_path="model",
+                serialization_format="pickle"
+            )
+            run_id = mlflow.active_run().info.run_id
+            mlflow.register_model(
+                model_uri=f"runs:/{run_id}/model",
+                name="ControlNet_8BitNorm_Model"
+            )
+            print("Successfully registered model as 'ControlNet_8BitNorm_Model'")
+        except Exception as e:
+            print(f"Failed to register model: {e}")
 
 if __name__ == '__main__':
     main()

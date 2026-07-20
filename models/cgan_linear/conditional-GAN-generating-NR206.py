@@ -84,13 +84,15 @@ try:
     if experiment:
         client = mlflow.tracking.MlflowClient()
         experiment_description = (
-            "# Linear Conditional GAN Retinal OCT Generation Experiment\n\n"
-            "This experiment trains a baseline linear Conditional GAN (cGAN) to generate real-looking "
-            "OCT scans conditioned on flattened layer segmentation masks.\n\n"
-            "## Model Components:\n"
-            "- **Generator:** Linear/Fully-Connected network mapping (noise z + flattened mask) to flattened images.\n"
-            "- **Discriminator:** Linear/Fully-Connected network classifying (image + mask) pairs.\n"
-            "- **Loss Functions:** BCELoss (Adversarial)."
+            "# Linear Conditional cGAN Retinal OCT Generation (8-Bit Norm)\n\n"
+            "This experiment trains a linear Conditional GAN (cGAN) to generate real-looking "
+            "OCT scans from anatomical priors (synthesized images) with 8-bit normalization and spatial L1 loss weighting.\n\n"
+            "## Configuration & Design Details:\n"
+            "- **Normalization:** 8-bit normalization `norm = image / 127.5 - 1.0` and reverse denormalization for plotting/evaluation.\n"
+            "- **Loss Formulation:** adversarial BCE loss + L1 reconstruction loss.\n"
+            "- **Spatial Weighting:** w_bg = 0.4 on background regions (where mask B=G=R=0) and w_layers = 1.0 on layers, applied to the L1 loss.\n"
+            "- **Training Settings:** Run for 300 epochs, validation metrics logged every epoch, comparison grids logged every 5 epochs.\n"
+            "- **Model Registration:** Generator registered as 'cGAN_8BitNorm_Generator' upon completion."
         )
         client.set_experiment_tag(experiment.experiment_id, "mlflow.note.content", experiment_description)
 except Exception as e:
@@ -112,6 +114,7 @@ def apply_gamma(val, g):
 
 def synthesize_from_mask(mask_bgra, min_gamma=0.5, max_gamma=1.2, custom_intensities=None):
     import cv2
+    rng = np.random.RandomState()
     height, width, _ = mask_bgra.shape
     raw_img = np.zeros((height, width), dtype=np.float32)
     
@@ -240,6 +243,7 @@ class NR206Dataset(Dataset):
         self.synth_images = []
         self.masks = []
         self.image_intensities = []
+        self.weight_maps = []
         
         for filename in self.filenames:
             img_path = os.path.join(self.data_path, filename)
@@ -249,16 +253,30 @@ class NR206Dataset(Dataset):
             img = Image.open(img_path).convert('L')
             real_np = np.array(img)
             
-            # Remove watermark on the bottom-left corner
-            clean_patch = real_np[350:, 600:]
-            real_np[350:, :150] = np.flip(clean_patch, axis=1)
+            # Remove watermark on the bottom-left corner if dimensions are compatible
+            if real_np.shape[0] >= 500 and real_np.shape[1] >= 750:
+                clean_patch = real_np[350:, 600:]
+                real_np[350:, :150] = np.flip(clean_patch, axis=1)
             
             # Load BGRA anatomical mask
             mask_bgra = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
             if mask_bgra is not None and len(mask_bgra.shape) == 3 and mask_bgra.shape[2] == 3:
                 alpha = np.full((mask_bgra.shape[0], mask_bgra.shape[1], 1), 255, dtype=np.uint8)
                 mask_bgra = np.concatenate([mask_bgra, alpha], axis=2)
+            if real_np is not None and mask_bgra is not None and real_np.shape[:2] != mask_bgra.shape[:2]:
+                mask_bgra = cv2.resize(mask_bgra, (real_np.shape[1], real_np.shape[0]), interpolation=cv2.INTER_NEAREST)
             self.masks.append(mask_bgra)
+            
+            # Compute background mask (where mask B=G=R=0) for spatial loss weighting
+            is_bg = (mask_bgra[:, :, 0] == 0) & (mask_bgra[:, :, 1] == 0) & (mask_bgra[:, :, 2] == 0)
+            bg_mask_pil = Image.fromarray(is_bg.astype(np.uint8) * 255).resize((self.img_size, self.img_size), Image.NEAREST)
+            bg_mask_np = np.array(bg_mask_pil) > 127
+            
+            # Weight map: 0.4 on background, 1.0 on layers
+            weight_map = np.ones((self.img_size, self.img_size), dtype=np.float32)
+            weight_map[bg_mask_np] = 0.4
+            weight_tensor = torch.tensor(weight_map, dtype=torch.float32).unsqueeze(0).to(device)
+            self.weight_maps.append(weight_tensor)
             
             # Profile intensities
             img_intensities = profile_single_image_intensities(real_np, mask_bgra, global_defaults)
@@ -292,9 +310,9 @@ class NR206Dataset(Dataset):
             if self.transform:
                 synth_img = self.transform(synth_img)
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            return self.real_images[idx], synth_img.to(device)
+            return self.real_images[idx], synth_img.to(device), self.weight_maps[idx]
         else:
-            return self.real_images[idx], self.synth_images[idx]
+            return self.real_images[idx], self.synth_images[idx], self.weight_maps[idx]
 
 
 # ## - Generator
@@ -366,12 +384,12 @@ class Discriminator(nn.Module):
         # Discriminator out
         out = self.model(x_concat)
         
-        return out.squeeze()
+        return out.reshape(-1)
 
 
 # ## - Adversarial Learning steps
 
-def generator_train_step(curr_batch_size, discriminator, generator, g_optimizer, criterion, real_images, priors, lambda_L1):
+def generator_train_step(curr_batch_size, discriminator, generator, g_optimizer, criterion, real_images, priors, weight_maps, lambda_L1):
     g_optimizer.zero_grad()
     
     # Building z
@@ -384,10 +402,10 @@ def generator_train_step(curr_batch_size, discriminator, generator, g_optimizer,
     validity = discriminator(fake_images, priors)
     
     # Calculating discrimination loss (fake images)
-    g_loss_GAN = criterion(validity, Variable(torch.ones(curr_batch_size)).to(device))
+    g_loss_GAN = criterion(validity.reshape(-1), Variable(torch.ones(curr_batch_size)).to(device))
     
-    # L1 reconstruction loss between generated fake and ground truth target
-    g_loss_L1 = torch.mean(torch.abs(fake_images - real_images)) * lambda_L1
+    # L1 reconstruction loss between generated fake and ground truth target with spatial weighting
+    g_loss_L1 = torch.mean(weight_maps * torch.abs(fake_images - real_images)) * lambda_L1
     
     g_loss = g_loss_GAN + g_loss_L1
     
@@ -404,7 +422,7 @@ def discriminator_train_step(curr_batch_size, discriminator, generator, d_optimi
     real_validity = discriminator(real_images, priors)
     
     # Calculating discrimination loss (real images)
-    real_loss = criterion(real_validity, Variable(torch.ones(curr_batch_size)).to(device))
+    real_loss = criterion(real_validity.reshape(-1), Variable(torch.ones(curr_batch_size)).to(device))
     
     # Building z
     z = Variable(torch.randn(curr_batch_size, z_size)).to(device)
@@ -416,7 +434,7 @@ def discriminator_train_step(curr_batch_size, discriminator, generator, d_optimi
     fake_validity = discriminator(fake_images, priors)
     
     # Calculating discrimination loss (fake images)
-    fake_loss = criterion(fake_validity, Variable(torch.zeros(curr_batch_size)).to(device))
+    fake_loss = criterion(fake_validity.reshape(-1), Variable(torch.zeros(curr_batch_size)).to(device))
     
     # Sum two losses
     d_loss = real_loss + fake_loss
@@ -427,11 +445,13 @@ def discriminator_train_step(curr_batch_size, discriminator, generator, d_optimi
     return d_loss.item()
 
 
-# Helper to convert PyTorch grid to numpy [0, 255] uint8
+# Helper to convert PyTorch grid to numpy [0, 255] uint8 using reverse denormalization
 def tensor_to_numpy(grid_tensor):
     np_grid = grid_tensor.cpu().numpy()
     np_grid = np.transpose(np_grid, (1, 2, 0))
-    np_grid = (np_grid * 255).astype(np.uint8)
+    # Reverse denormalization: (norm + 1.0) * 127.5
+    np_grid = (np_grid + 1.0) * 127.5
+    np_grid = np.clip(np_grid, 0, 255).astype(np.uint8)
     return np_grid
 
 
@@ -451,9 +471,10 @@ def main():
     
     # Fixed batch of test inputs for evaluation
     test_batch = next(iter(test_loader))
-    test_real_images, test_priors = test_batch
+    test_real_images, test_priors, test_weight_maps = test_batch
     test_real_images = test_real_images.to(device)
     test_priors = test_priors.to(device)
+    test_weight_maps = test_weight_maps.to(device)
     
     # Initialize networks
     generator = Generator(generator_layer_size, z_size, img_size)
@@ -489,7 +510,10 @@ def main():
     
     with mlflow.start_run(run_name=run_name) as run:
         # Set run description note
-        mlflow.set_tag("mlflow.note.content", f"Linear cGAN training run with batch size {batch_size}, {epochs} epochs, and {img_size}x{img_size} resolution.")
+        mlflow.set_tag("mlflow.note.content", (
+            f"Linear cGAN training run with 8-bit normalization, spatial loss weighting (w_bg=0.4), "
+            f"L1 reconstruction loss, batch size {batch_size}, {epochs} epochs, and {img_size}x{img_size} resolution."
+        ))
         # Log parameters
         mlflow.log_params(config)
         # Log configuration file as artifact
@@ -497,12 +521,7 @@ def main():
         
         # Log fixed inputs
         test_real_grid = vutils.make_grid(test_real_images, nrow=4, normalize=False)
-        test_real_grid = (test_real_grid + 1.0) / 2.0
-        test_real_grid = torch.clamp(test_real_grid, 0.0, 1.0)
-        
         test_prior_grid = vutils.make_grid(test_priors, nrow=4, normalize=False)
-        test_prior_grid = (test_prior_grid + 1.0) / 2.0
-        test_prior_grid = torch.clamp(test_prior_grid, 0.0, 1.0)
         
         mlflow.log_image(tensor_to_numpy(test_real_grid), "test_real_images.png")
         mlflow.log_image(tensor_to_numpy(test_prior_grid), "test_priors.png")
@@ -516,12 +535,10 @@ def main():
             epoch_g_losses_gan = []
             epoch_g_losses_l1 = []
             epoch_d_losses = []
-            for batch_idx, data in enumerate(train_loader):
-                real_images = data['real'].float()
-                priors = data['prior'].float()
-                
-                real_images = Variable(real_images).to(device)
-                priors = Variable(priors).to(device)
+            for batch_idx, (real_images, priors, weight_maps) in enumerate(train_loader):
+                real_images = Variable(real_images.float()).to(device)
+                priors = Variable(priors.float()).to(device)
+                weight_maps = Variable(weight_maps.float()).to(device)
                 curr_batch_size = real_images.size(0)
                 
                 # Train networks
@@ -529,7 +546,7 @@ def main():
                     curr_batch_size, discriminator, generator, d_optimizer, criterion, real_images, priors
                 )
                 g_loss, g_loss_gan, g_loss_l1 = generator_train_step(
-                    curr_batch_size, discriminator, generator, g_optimizer, criterion, real_images, priors, config.get('lambda_L1', 100.0)
+                    curr_batch_size, discriminator, generator, g_optimizer, criterion, real_images, priors, weight_maps, config.get('lambda_L1', 100.0)
                 )
                 
                 epoch_g_losses.append(g_loss)
@@ -563,10 +580,11 @@ def main():
             val_d_losses = []
             
             with torch.no_grad():
-                for val_images, val_priors in test_loader:
+                for val_images, val_priors, val_weight_maps in test_loader:
                     curr_val_batch_size = val_images.size(0)
                     val_images = val_images.to(device)
                     val_priors = val_priors.to(device)
+                    val_weight_maps = val_weight_maps.to(device)
                     
                     val_z = Variable(torch.randn(curr_val_batch_size, z_size)).to(device)
                     val_fake_images = generator(val_z, val_priors)
@@ -581,7 +599,7 @@ def main():
                     # G validation loss
                     fake_validity_g = discriminator(val_fake_images, val_priors)
                     val_g_loss_gan = criterion(fake_validity_g, Variable(torch.ones(curr_val_batch_size)).to(device)).item()
-                    val_g_loss_l1 = (torch.mean(torch.abs(val_fake_images - val_images)) * config.get('lambda_L1', 100.0)).item()
+                    val_g_loss_l1 = (torch.mean(val_weight_maps * torch.abs(val_fake_images - val_images)) * config.get('lambda_L1', 100.0)).item()
                     val_g_loss = val_g_loss_gan + val_g_loss_l1
                     
                     val_g_losses.append(val_g_loss)
@@ -613,28 +631,18 @@ def main():
                 for i in range(min(3, test_priors.size(0))):
                     grid_tensors = [test_priors[i].expand(3,-1,-1), test_fake_images[i].expand(3,-1,-1), test_real_images[i].expand(3,-1,-1)]
                     grid = vutils.make_grid(grid_tensors, nrow=3, normalize=False)
-                    grid = (grid + 1.0) / 2.0
-                    grid = torch.clamp(grid, 0.0, 1.0)
                     mlflow.log_image(tensor_to_numpy(grid), f"validation_grid_{i+1}_epoch_{epoch+1}.png")
             
-            # Log periodic training samples for progress tracking
-            if epoch % 5 == 0 or epoch == epochs - 1:
+            # Log periodic training samples for progress tracking (every 5 epochs)
+            if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
                 # Log first batch of train samples
                 with torch.no_grad():
                     train_z = torch.randn(min(16, curr_batch_size), z_size).to(device)
                     train_fake_images = generator(train_z, priors[:16])
                 
                 train_fake_grid = vutils.make_grid(train_fake_images, nrow=4, normalize=False)
-                train_fake_grid = (train_fake_grid + 1.0) / 2.0
-                train_fake_grid = torch.clamp(train_fake_grid, 0.0, 1.0)
-                
                 train_real_grid = vutils.make_grid(real_images[:16], nrow=4, normalize=False)
-                train_real_grid = (train_real_grid + 1.0) / 2.0
-                train_real_grid = torch.clamp(train_real_grid, 0.0, 1.0)
-                
                 train_prior_grid = vutils.make_grid(priors[:16], nrow=4, normalize=False)
-                train_prior_grid = (train_prior_grid + 1.0) / 2.0
-                train_prior_grid = torch.clamp(train_prior_grid, 0.0, 1.0)
                 
                 mlflow.log_image(tensor_to_numpy(train_real_grid), f"train_real_images_epoch_{epoch+1}.png")
                 mlflow.log_image(tensor_to_numpy(train_prior_grid), f"train_priors_epoch_{epoch+1}.png")
@@ -661,10 +669,10 @@ def main():
                     
             generator.train()
 
-        # Log final pytorch models (unwrapped if DataParallel)
+        # Log final pytorch models (unwrapped if DataParallel) and register generator
         gen_to_log = generator.module if isinstance(generator, nn.DataParallel) else generator
         disc_to_log = discriminator.module if isinstance(discriminator, nn.DataParallel) else discriminator
-        mlflow.pytorch.log_model(gen_to_log, "generator_model", serialization_format="pickle")
+        mlflow.pytorch.log_model(gen_to_log, "generator_model", serialization_format="pickle", registered_model_name="cGAN_8BitNorm_Generator")
         mlflow.pytorch.log_model(disc_to_log, "discriminator_model", serialization_format="pickle")
         print("Training completed and logged successfully.")
 

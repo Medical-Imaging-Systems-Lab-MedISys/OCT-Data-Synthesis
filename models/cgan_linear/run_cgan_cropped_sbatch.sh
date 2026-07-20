@@ -30,17 +30,10 @@ echo "Rsyncing data from persistent storage to node /tmp..."
 # Directly targeting the rsync binary inside the specified conda env avoids needing to activate it
 /data/vds/env_tools/bin/rsync -aq ${SOURCE_DATA}/ ${LOCAL_DATA_DIR}/
 
-# Activate your specific ML/PyTorch environment here if you aren't running in base
-conda activate /data/vds/env_pt
-
 # 4. Execute Training
 #export LOCAL_DATA_DIR="/tmp/NR206_${SLURM_JOB_ID}/NR206"
 echo "Starting cGAN Cropped Training with ${LOSS_TYPE^^} Loss..."
-python models/cgan_linear/train_cgan_cropped.py --loss_type ${LOSS_TYPE}
+/data/vds/env_pt/bin/python models/cgan_linear/train_cgan_cropped.py --loss_type ${LOSS_TYPE}
 
-#export LOCAL_DATA_DIR="/tmp/NR206_${SLURM_JOB_ID}"
-
-# 5. Node Storage Cleanup
-echo "Training process finished. Initiating cleanup of ${LOCAL_DATA_DIR}..."
-rm -rf ${LOCAL_DATA_DIR}
-echo "Cleanup completed successfully."
+# 5. Node Storage Cleanup (Disabled as requested to keep codes/checkpoints on node)
+echo "Training process finished. Keeping local data on node."

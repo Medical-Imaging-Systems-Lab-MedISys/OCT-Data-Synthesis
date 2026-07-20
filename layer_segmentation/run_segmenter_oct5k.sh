@@ -27,11 +27,8 @@ mkdir -p ${LOCAL_DATA_DIR}
 
 echo "Rsyncing dataset from persistent storage to node /tmp for faster I/O..."
 /data/vds/env_tools/bin/rsync -aq ${SOURCE_DATA}/ ${LOCAL_DATA_DIR}/
-echo "Copying RETFound weights to local /tmp..."
-cp ${WEIGHTS_SOURCE} ${LOCAL_DATA_DIR}/
-
-# Activate your specific PyTorch environment
-conda activate /data/vds/env_pt
+echo "Rsyncing RETFound weights to local /tmp..."
+/data/vds/env_tools/bin/rsync -aq ${WEIGHTS_SOURCE} ${LOCAL_DATA_DIR}/
 
 # 4. Execute Training
 echo "Starting RETFound Segmentation Training on OCT5k..."
@@ -39,11 +36,9 @@ echo "Starting RETFound Segmentation Training on OCT5k..."
 # Navigate to the correct directory (SLURM executes from a spool dir by default)
 cd /data/vds/mmk/Codes/oct_data_synthesis/layer_segmentation
 
-python train_oct5k.py \
+/data/vds/env_pt/bin/python train_oct5k.py \
     --data_dir ${LOCAL_DATA_DIR} \
     --weights_path "${LOCAL_DATA_DIR}/RETFound_mae_natureOCT.pth"
 
-# 5. Node Storage Cleanup
-echo "Training process finished. Initiating cleanup of ${LOCAL_DATA_DIR}..."
-rm -rf ${LOCAL_DATA_DIR}
-echo "Cleanup completed successfully."
+# 5. Node Storage Cleanup (Disabled as requested to keep codes/checkpoints on node)
+echo "Training process finished. Keeping local data on node."
