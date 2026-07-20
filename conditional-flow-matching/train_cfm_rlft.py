@@ -225,6 +225,7 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-5, help="Learning rate for RL fine-tuning")
     parser.add_argument("--loss_type", type=str, default="l2", choices=["l1", "l2"], help="Base model loss type: l1 or l2")
     parser.add_argument("--baseline_checkpoint", type=str, default=None, help="Explicit path to baseline model checkpoint")
+    parser.add_argument("--no_spatial_weighting", action="store_true", help="Disable spatial loss weighting (w_bg=1.0, w_layers=1.0)")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -251,9 +252,10 @@ def main():
 
     config = {
         "experiment_name": f"OCT_CFM_8BitNorm_RLFT_{args.loss_type.upper()}",
-        "run_name": f"cfm_8bitnorm_rlft_{args.loss_type.lower()}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
+        "run_name": f"cfm_8bitnorm_rlft_{args.loss_type.lower()}{'_nospatial' if args.no_spatial_weighting else ''}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}",
         "loss_type": args.loss_type.lower(),
         "baseline_checkpoint_used": checkpoint_to_load if checkpoint_to_load else "initialized_from_scratch",
+        "no_spatial_weighting": args.no_spatial_weighting,
         "mlflow_tracking_uri": "http://10.24.38.15:5000",
         "batch_size": 16,
         "epochs": args.epochs,
@@ -264,7 +266,7 @@ def main():
         "num_val_images": 3,
         "inference_steps": 50,
         "sigma": 0.0,
-        "w_bg": 0.4,
+        "w_bg": 1.0 if args.no_spatial_weighting else 0.4,
         "w_layers": 1.0
     }
 
