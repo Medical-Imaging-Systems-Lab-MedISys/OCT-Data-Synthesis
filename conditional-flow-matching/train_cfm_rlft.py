@@ -193,8 +193,9 @@ class OCTRewardModel(nn.Module):
         r_contrast = retina_intensity - bg_intensity
 
         # 3. Speckle Noise Realism Reward (R_speckle)
-        bg_pixels = x_gen * bg_mask
-        bg_var = torch.var(bg_pixels, dim=[1, 2, 3])
+        # Correctly compute variance of ONLY the background region pixels (ignore zeroed-out mask areas)
+        bg_mean = (x_gen * bg_mask).sum(dim=[1, 2, 3], keepdim=True) / (bg_mask.sum(dim=[1, 2, 3], keepdim=True) + 1e-6)
+        bg_var = ((x_gen - bg_mean) ** 2 * bg_mask).sum(dim=[1, 2, 3]) / (bg_mask.sum(dim=[1, 2, 3]) + 1e-6)
         r_speckle = -torch.abs(bg_var - 0.05) # Penalize background noise variance deviation
 
         # Total Composite Reward Score
@@ -335,10 +336,13 @@ def main():
                 with torch.no_grad():
                     x_gen = generate_samples_ODE(model, x0, num_steps=20)
                     r_total, r_layer, r_contrast, r_speckle = reward_model(x_gen, x1, layer_mask)
-                    reward_weights = torch.softmax(r_total, dim=0)
+                    
+                    # Standardize rewards for stable softmax scaling (Advantage)
+                    adv = (r_total - r_total.mean()) / (r_total.std() + 1e-4)
+                    reward_weights = torch.softmax(adv / 0.1, dim=0) # temperature = 0.1
 
-                # Reward-Weighted Policy Gradient Loss
-                rlft_loss = (base_flow_loss * reward_weights).sum()
+                # Reward-Weighted Policy Gradient Loss (incorporating sample_weight)
+                rlft_loss = (base_flow_loss * reward_weights * s_weight.squeeze()).sum()
 
                 rlft_loss.backward()
                 optimizer.step()
@@ -374,8 +378,8 @@ def main():
 
         try:
             mlflow.log_artifact(checkpoint_path, artifact_path="checkpoints")
-            mlflow.pytorch.log_model(model, "model", registered_model_name="CFM_8BitNorm_RLFT_Model")
-            print("Successfully registered model in MLflow Model Registry under CFM_8BitNorm_RLFT_Model")
+            mlflow.pytorch.log_model(model, "model", registered_model_name=f"CFM_8BitNorm_RLFT_{config['loss_type'].upper()}_Model")
+            print(f"Successfully registered model in MLflow Model Registry under CFM_8BitNorm_RLFT_{config['loss_type'].upper()}_Model")
         except Exception as e:
             print(f"Warning: MLflow model registration failed: {e}")
 
