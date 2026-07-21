@@ -394,7 +394,7 @@ HTML_TEMPLATE = """
             
             <div class="control-group">
                 <label>Bend Amplitude (Pixels) <span id="val-amp">0</span></label>
-                <input type="range" id="amp" min="-200" max="200" value="0" oninput="updateVal('amp'); scheduleUpdate()">
+                <input type="range" id="amp" min="0" max="200" value="0" oninput="updateVal('amp'); scheduleUpdate()">
             </div>
             
             <div class="control-group">
