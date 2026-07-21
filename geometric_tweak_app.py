@@ -169,6 +169,10 @@ def process_image():
             
     # Crop ONLY the pure black zero-padded band created by the shift (max_dy),
     # preserving the vitreous speckle noise above the retina.
+    is_bg_shifted = (shifted_mask[:,:,0] == 0) & (shifted_mask[:,:,1] == 0) & (shifted_mask[:,:,2] == 0)
+    is_ret_shifted = ~is_bg_shifted
+    has_ret_shifted = np.any(is_ret_shifted, axis=0)
+    
     max_dy = int(np.max(dy))
     if np.any(has_ret_shifted):
         top_y_per_col = np.argmax(is_ret_shifted, axis=0)
