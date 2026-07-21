@@ -6,14 +6,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import mlflow
 import datetime
+import argparse
 from diffusers import UNet2DModel
 from train_val import synthesize_from_mask, generate_samples
 
-import argparse
-
 # Configuration
 MLFLOW_URI = "http://10.24.38.15:5000"
-EXPERIMENT_NAME = "OCT_CFM_ZeroShot_Validation"
+EXPERIMENT_NAME = "OCT_CFM_ZeroShot_Validation_PreserveSclera"
 
 # Paths to models & datasets
 CHECKPOINTS = {
@@ -35,58 +34,23 @@ DEFAULT_PARAMS = {"amplitude": 100.0, "center": 0.45, "width": 0.40}
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def crop_and_pad_curved(image, mask_bgra):
+def crop_and_pad_preserve_sclera(image, mask_bgra):
+    """
+    Preserves the real fibrous structure/sclera below the last retinal layer (b8)
+    without replacing it with synthetic tiled background noise.
+    """
     H, W = image.shape[:2]
-    is_bg = (mask_bgra[:, :, 0] == 0) & (mask_bgra[:, :, 1] == 0) & (mask_bgra[:, :, 2] == 0)
-    is_retina = ~is_bg
-    has_retina = np.any(is_retina, axis=0)
-    b8 = np.full(W, H - 1, dtype=np.int32)
-    if np.any(has_retina):
-        b8[has_retina] = H - 1 - np.argmax(is_retina[::-1, :][:, has_retina], axis=0)
-    
-    b8 = np.clip(b8 + 3, 0, H - 1)
-    max_y = np.max(b8[has_retina]) if np.any(has_retina) else H
-    max_y = min(H, max_y + 5)
-    
-    cropped_h = max_y
-    max_dim = max(cropped_h, W)
-    pad_h = max_dim - cropped_h
+    max_dim = max(H, W)
+    pad_h = max_dim - H
     pad_w = max_dim - W
     
-    safe_bottom = H - 20
-    safe_top = max(0, safe_bottom - 50)
-    bottom_patch = image[safe_top:safe_bottom]
-    patch_height = bottom_patch.shape[0]
-    
-    tiles_needed = int(np.ceil(max_dim / patch_height)) if patch_height > 0 else 1
-    tiles = []
-    for i in range(tiles_needed):
-        shift = np.random.randint(0, W) if W > 0 else 0
-        shifted = np.roll(bottom_patch, shift, axis=1)
-        if i % 2 == 1:
-            shifted = np.flip(shifted, axis=0)
-        tiles.append(shifted)
-        
-    tiled_bg = np.concatenate(tiles, axis=0)[:max_dim, :W]
-    if pad_w > 0:
+    if pad_h > 0 or pad_w > 0:
         if len(image.shape) == 3:
-            tiled_bg = np.pad(tiled_bg, ((0, 0), (0, pad_w), (0, 0)), mode='symmetric')
+            final_image = np.pad(image, ((0, pad_h), (0, pad_w), (0, 0)), mode='edge')
         else:
-            tiled_bg = np.pad(tiled_bg, ((0, 0), (0, pad_w)), mode='symmetric')
-            
-    y_coords = np.arange(max_dim)[:, None]
-    keep_mask = y_coords <= b8[None, :]
-    if pad_w > 0:
-        keep_mask = np.pad(keep_mask, ((0, 0), (0, pad_w)), mode='constant', constant_values=False)
-        
-    cropped_img = image[:cropped_h]
-    if len(image.shape) == 3:
-        padded_img = np.pad(cropped_img, ((0, pad_h), (0, pad_w), (0, 0)), mode='constant')
-        keep_mask_3d = np.expand_dims(keep_mask, axis=-1)
-        final_image = np.where(keep_mask_3d, padded_img, tiled_bg)
+            final_image = np.pad(image, ((0, pad_h), (0, pad_w)), mode='edge')
     else:
-        padded_img = np.pad(cropped_img, ((0, pad_h), (0, pad_w)), mode='constant')
-        final_image = np.where(keep_mask, padded_img, tiled_bg)
+        final_image = image
         
     return final_image
 
@@ -107,11 +71,11 @@ def process_sample(img_path, mask_path, params):
     elif orig_mask.shape[2] == 3:
         orig_mask = cv2.cvtColor(orig_mask, cv2.COLOR_BGR2BGRA)
 
-    # 1. Original Preprocessed
+    # 1. Original Preprocessed (preserving sclera/fibrous structure below retina)
     img_clean = remove_watermark(orig_img.copy())
     orig_img_256 = cv2.resize(img_clean, (256, 256), interpolation=cv2.INTER_LINEAR)
     orig_mask_256 = cv2.resize(orig_mask, (256, 256), interpolation=cv2.INTER_NEAREST)
-    orig_preprocessed = crop_and_pad_curved(orig_img_256, orig_mask_256)
+    orig_preprocessed = crop_and_pad_preserve_sclera(orig_img_256, orig_mask_256)
 
     # 2. Geometric modification
     H, W = orig_img.shape[:2]
@@ -159,7 +123,7 @@ def process_sample(img_path, mask_path, params):
         
     geom_img_256 = cv2.resize(shifted_img, (256, 256), interpolation=cv2.INTER_LINEAR)
     geom_mask_256 = cv2.resize(shifted_mask, (256, 256), interpolation=cv2.INTER_NEAREST)
-    geom_modified_img = crop_and_pad_curved(geom_img_256, geom_mask_256)
+    geom_modified_img = crop_and_pad_preserve_sclera(geom_img_256, geom_mask_256)
     
     # 3. Prior (Synthetic Mask)
     prior_img = synthesize_from_mask(geom_mask_256)
@@ -182,6 +146,8 @@ def load_unet_model(checkpoint_path):
     model.eval()
     return model
 
+import re
+
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
 
@@ -193,11 +159,9 @@ def main():
     mlflow.set_tracking_uri(MLFLOW_URI)
     mlflow.set_experiment(EXPERIMENT_NAME)
     
-    # Find all sample image files
     test_files = glob.glob(os.path.join(DATA_ROOT, "test", "*.png"))
     train_files = glob.glob(os.path.join(DATA_ROOT, "train", "*.png"))
     
-    # Map filenames to path tuples
     samples_map = {}
     for f in train_files:
         name = os.path.splitext(os.path.basename(f))[0]
@@ -211,10 +175,8 @@ def main():
         if os.path.exists(lbl):
             samples_map[name] = (f, lbl)
             
-    # Always include the target samples requested by user + all test set samples
     target_sample_names = sorted(list(samples_map.keys()), key=natural_sort_key)
-    
-    print(f"Found {len(target_sample_names)} samples for zero-shot validation.")
+    print(f"Found {len(target_sample_names)} samples for zero-shot validation (Preserving Fibrous Sclera).")
     
     for model_name, ckpt_path in CHECKPOINTS.items():
         if args.model_key and model_name.lower() != args.model_key.lower():
@@ -225,18 +187,18 @@ def main():
             continue
             
         print(f"\n==========================================")
-        print(f"Running Zero-Shot Validation for: {model_name}")
+        print(f"Running Zero-Shot Validation (Preserve Sclera) for: {model_name}")
         print(f"Loading checkpoint: {ckpt_path}")
         print(f"==========================================")
         
         model = load_unet_model(ckpt_path)
         
-        run_name = f"ZeroShot_Val_{model_name}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        run_name = f"ZeroShot_Val_PreserveSclera_{model_name}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
         with mlflow.start_run(run_name=run_name):
             mlflow.log_param("checkpoint", ckpt_path)
             mlflow.log_param("model_name", model_name)
             mlflow.set_tag("mlflow.note.content", 
-                           f"Zero-shot geometric modification validation on {model_name}. "
+                           f"Zero-shot geometric validation on {model_name} preserving real fibrous sclera below retina. "
                            "Subplots per sample: Original (Preprocessed), Geometric Modified, Prior (Synthetic Mask), Generated Synthesis.")
             
             for name in target_sample_names:
@@ -247,7 +209,6 @@ def main():
                 
                 orig_preprocessed, geom_modified_img, geom_mask_256, prior_img = process_sample(img_path, mask_path, params)
                 
-                # Normalize prior to [-1, 1] for model inference
                 prior_norm = (prior_img.astype(np.float32) / 127.5) - 1.0
                 x0_tensor = torch.from_numpy(prior_norm).unsqueeze(0).unsqueeze(0).to(device)
                 
@@ -256,7 +217,6 @@ def main():
                     x1_gen_disp = (x1_gen_tensor.squeeze().cpu().numpy() + 1.0) / 2.0
                     x1_gen_disp = np.clip(x1_gen_disp, 0.0, 1.0)
                     
-                # Build 4-column validation grid figure
                 fig, axes = plt.subplots(1, 4, figsize=(20, 5))
                 titles = [
                     "Original (Preprocessed)", 
@@ -276,14 +236,13 @@ def main():
                     ax.imshow(img, cmap='gray')
                     ax.axis('off')
                     
-                plt.suptitle(f"Sample: {name} | Params: Amp={params['amplitude']}, Center={params['center']}, Width={params['width']}", fontsize=16, y=1.02)
+                plt.suptitle(f"Sample: {name} (Preserved Sclera) | Params: Amp={params['amplitude']}, Center={params['center']}, Width={params['width']}", fontsize=16, y=1.02)
                 plt.tight_layout()
                 
-                # Log figure artifact to MLflow
                 mlflow.log_figure(fig, f"validation_grids/{name}_grid.png")
                 plt.close(fig)
                 
-            print(f"Successfully completed zero-shot validation for {model_name}!")
+            print(f"Successfully completed zero-shot validation (Preserve Sclera) for {model_name}!")
 
 if __name__ == "__main__":
     main()
