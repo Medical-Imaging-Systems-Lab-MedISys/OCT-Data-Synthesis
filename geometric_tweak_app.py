@@ -167,9 +167,16 @@ def process_image():
             shifted_img[:, i] = img[:, i]
             shifted_mask[:, i] = mask[:, i]
             
+    # Crop the total black area created by the shift
+    top_crop = max(0, int(np.max(dy)))
+    bottom_crop = max(0, int(-np.min(dy)))
+    
+    # Ensure we don't crop the entire image
+    if top_crop + bottom_crop < H:
+        shifted_img = shifted_img[top_crop:H - bottom_crop, :]
+        shifted_mask = shifted_mask[top_crop:H - bottom_crop, :]
+            
     # 2. Crop and pad curved as in CFM training
-    # For training we usually resize to 256x256 first or after? 
-    # In train_cropped_multidataset.py: x0_img_squashed = resize(256), then crop_and_pad_curved
     target_size = (256, 256)
     
     img_squashed = cv2.resize(shifted_img, target_size, interpolation=cv2.INTER_LINEAR)
@@ -492,6 +499,6 @@ HTML_TEMPLATE = """
 """
 
 if __name__ == '__main__':
-    port = find_free_port(3003)
+    port = find_free_port(3001)
     print(f"Starting Geometric Tweak App on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
