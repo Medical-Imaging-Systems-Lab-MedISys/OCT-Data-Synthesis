@@ -167,16 +167,22 @@ def process_image():
             shifted_img[:, i] = img[:, i]
             shifted_mask[:, i] = mask[:, i]
             
-    # Crop the total black area created by the shift
-    top_crop = max(0, int(np.max(dy)))
-    bottom_crop = max(0, int(-np.min(dy)))
-    
-    # Ensure we don't crop the entire image
-    if top_crop + bottom_crop < H:
-        shifted_img = shifted_img[top_crop:H - bottom_crop, :]
-        shifted_mask = shifted_mask[top_crop:H - bottom_crop, :]
+    # Crop ONLY the pure black zero-padded band created by the shift (max_dy),
+    # preserving the vitreous speckle noise above the retina.
+    max_dy = int(np.max(dy))
+    if np.any(has_ret_shifted):
+        top_y_per_col = np.argmax(is_ret_shifted, axis=0)
+        min_top_y = np.min(top_y_per_col[has_ret_shifted])
+        # Ensure we don't slice into the retina even if amplitude is large
+        top_crop = min(max_dy, max(0, min_top_y - 5))
+    else:
+        top_crop = max_dy
+        
+    if top_crop > 0 and top_crop < shifted_img.shape[0]:
+        shifted_img = shifted_img[top_crop:, :]
+        shifted_mask = shifted_mask[top_crop:, :]
             
-    # 2. Crop and pad curved as in CFM training
+    # 2. Resize to 256x256 then Crop and pad curved as in CFM training
     target_size = (256, 256)
     
     img_squashed = cv2.resize(shifted_img, target_size, interpolation=cv2.INTER_LINEAR)
