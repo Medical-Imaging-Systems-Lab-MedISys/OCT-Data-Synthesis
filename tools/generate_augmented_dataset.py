@@ -107,6 +107,15 @@ def load_sample(filename):
         non_black_rows = np.where(row_max > 10)[0]
         if len(non_black_rows) > 0:
             first_non_black = non_black_rows[0]
+            
+            # Safeguard: check topmost retina layer coordinate to never cut into the retina
+            if mask is not None:
+                is_bg = (mask[:, :, 0] == 0) & (mask[:, :, 1] == 0) & (mask[:, :, 2] == 0)
+                is_retina = ~is_bg
+                if np.any(is_retina):
+                    topmost_retina_y = np.min(np.where(is_retina)[0])
+                    first_non_black = min(first_non_black, max(0, topmost_retina_y - 15))
+                    
             if first_non_black > 0:
                 img = img[first_non_black:, :]
                 if mask is not None:
@@ -246,12 +255,34 @@ def main():
             c_fovea = find_default_center(mask)
             
             # 2. Generate 10 augmented variants
+            is_bg = (mask[:, :, 0] == 0) & (mask[:, :, 1] == 0) & (mask[:, :, 2] == 0)
+            is_retina = ~is_bg
+            H_orig, W_orig = mask.shape[:2]
+            y_indices, x_indices = np.where(is_retina)
+            
             for i in range(1, 11):
-                amp = random.uniform(40, 150)
-                center = float(np.clip(c_fovea + random.uniform(-0.05, 0.05), 0.10, 0.90))
-                width = random.uniform(0.40, 0.80)
-                tilt = random.uniform(-35, 35)
-                
+                amp, center, width, tilt = 0.0, 0.0, 0.0, 0.0
+                for attempt in range(100):
+                    amp = random.uniform(40, 150)
+                    center = float(np.clip(c_fovea + random.uniform(-0.05, 0.05), 0.10, 0.90))
+                    width = random.uniform(0.40, 0.80)
+                    tilt = random.uniform(-35, 35)
+                    
+                    # Verify no retina cutoff before executing full crop/resize pipeline
+                    x_arr = np.arange(W_orig)
+                    center_px = center * W_orig
+                    width_px = width * W_orig
+                    dy_bend = amp * np.exp(-((x_arr - center_px)**2) / (2 * (width_px**2) + 1e-6))
+                    dy_tilt = tilt * (x_arr - W_orig/2) / (W_orig/2)
+                    dy = np.round(dy_bend + dy_tilt).astype(int)
+                    
+                    if len(y_indices) > 0:
+                        shifted_y = y_indices + dy[x_indices]
+                        if not (np.any(shifted_y < 0) or np.any(shifted_y >= H_orig)):
+                            break
+                    else:
+                        break
+                        
                 aug_img, aug_mask = generate_augmented_pair(img, mask, amp, center, width, tilt)
                 
                 aug_name = f"{base_name}_aug_{i}.png"

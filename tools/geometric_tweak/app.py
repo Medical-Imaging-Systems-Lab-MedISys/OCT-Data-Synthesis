@@ -129,10 +129,23 @@ def load_sample(filename):
             
     # Dynamically crop top pure black padding (no speckle) from both img and mask
     if img is not None:
-        row_max = np.max(img, axis=1)
-        non_black_rows = np.where(row_max > 5)[0]
+        H, W = img.shape[:2]
+        # Ignore outer 15% left and right columns to avoid border artifacts / metadata
+        mid_img = img[:, int(W*0.15):int(W*0.85)]
+        row_max = np.max(mid_img, axis=1)
+        non_black_rows = np.where(row_max > 10)[0]
         if len(non_black_rows) > 0:
             first_non_black = non_black_rows[0]
+            
+            # Safeguard: check topmost retina layer coordinate to never cut into the retina
+            if mask is not None:
+                is_bg = (mask[:, :, 0] == 0) & (mask[:, :, 1] == 0) & (mask[:, :, 2] == 0)
+                is_retina = ~is_bg
+                if np.any(is_retina):
+                    topmost_retina_y = np.min(np.where(is_retina)[0])
+                    # Crop index must remain at least 15 pixels above the retina topmost boundary
+                    first_non_black = min(first_non_black, max(0, topmost_retina_y - 15))
+                    
             if first_non_black > 0:
                 img = img[first_non_black:, :]
                 if mask is not None:
@@ -206,13 +219,35 @@ def get_batch_list():
             
         # Generate 10 randomized parameters per file
         variants = []
+        is_bg = (mask[:, :, 0] == 0) & (mask[:, :, 1] == 0) & (mask[:, :, 2] == 0) if mask is not None else None
+        is_retina = ~is_bg if is_bg is not None else None
+        H, W = mask.shape[:2] if mask is not None else (512, 512)
+        y_indices, x_indices = np.where(is_retina) if is_retina is not None else ([], [])
+        
         for _ in range(10):
-            amp = random.uniform(40, 150)
-            # Center constrained to fovea center +/- 5% relative width
-            center = float(np.clip(c_fovea + random.uniform(-0.05, 0.05), 0.10, 0.90))
-            # Increase bend width (40% to 80%) to make the bends smoother (less steep)
-            width = random.uniform(0.40, 0.80)
-            tilt = random.uniform(-35, 35)
+            amp, center, width, tilt = 0.0, 0.0, 0.0, 0.0
+            # Try up to 100 times to find a set of parameters that does not cut off the retina
+            for attempt in range(100):
+                amp = random.uniform(40, 150)
+                center = float(np.clip(c_fovea + random.uniform(-0.05, 0.05), 0.10, 0.90))
+                width = random.uniform(0.40, 0.80)
+                tilt = random.uniform(-35, 35)
+                
+                # Check for retina cutoff
+                x_arr = np.arange(W)
+                center_px = center * W
+                width_px = width * W
+                dy_bend = amp * np.exp(-((x_arr - center_px)**2) / (2 * (width_px**2) + 1e-6))
+                dy_tilt = tilt * (x_arr - W/2) / (W/2)
+                dy = np.round(dy_bend + dy_tilt).astype(int)
+                
+                if len(y_indices) > 0:
+                    shifted_y = y_indices + dy[x_indices]
+                    if not (np.any(shifted_y < 0) or np.any(shifted_y >= H)):
+                        break  # valid parameter set found!
+                else:
+                    break
+                    
             variants.append({
                 "amplitude": round(amp, 2),
                 "center": round(center, 4),
