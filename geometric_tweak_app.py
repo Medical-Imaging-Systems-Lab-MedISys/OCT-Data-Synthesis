@@ -19,6 +19,7 @@ def find_free_port(start_port=3003):
     while port < 65535:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind(('0.0.0.0', port))
                 return port
         except OSError:
@@ -473,8 +474,8 @@ HTML_TEMPLATE = """
             </div>
             
             <div class="control-group">
-                <label>Bend Width <span id="val-width">20</span></label>
-                <input type="range" id="width" min="5" max="100" value="20" oninput="updateVal('width'); scheduleUpdate()">
+                <label>Bend Width <span id="val-width">40</span></label>
+                <input type="range" id="width" min="5" max="100" value="40" oninput="updateVal('width'); scheduleUpdate()">
             </div>
             
             <div class="control-group">
@@ -530,6 +531,8 @@ HTML_TEMPLATE = """
             updateVal('amp');
             document.getElementById('tilt').value = 0;
             updateVal('tilt');
+            document.getElementById('width').value = 40;
+            updateVal('width');
             
             // Set bend center slider to calculated default center from backend fovea detector
             const centerVal = Math.round(data.default_center * 100);
