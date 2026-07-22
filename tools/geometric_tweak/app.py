@@ -897,6 +897,23 @@ HTML_TEMPLATE = """
                     const scroller = document.createElement('div');
                     scroller.className = 'batch-scroller';
                     
+                    // Prepend Original Preprocessed Image Card
+                    const origCard = document.createElement('div');
+                    origCard.className = 'batch-card';
+                    origCard.style.border = '2px dashed var(--accent)';
+                    const origImgUrl = `/api/render_augment?filename=${encodeURIComponent(sample.filename)}&amplitude=0&center=0.5&width=0.4&tilt=0`;
+                    origCard.innerHTML = `
+                        <img src="${origImgUrl}" loading="lazy" alt="Original Preprocessed Image">
+                        <div class="batch-card-info" style="background: rgba(14, 165, 233, 0.08);">
+                            <span><strong style="color: var(--accent);">Original (Preprocessed)</strong></span>
+                            <span>Amp: <strong>0px</strong></span>
+                            <span>Center: <strong>50%</strong></span>
+                            <span>Width: <strong>40%</strong></span>
+                            <span>Tilt: <strong>0px</strong></span>
+                        </div>
+                    `;
+                    scroller.appendChild(origCard);
+                    
                     sample.variants.forEach((v, vIdx) => {
                         const card = document.createElement('div');
                         card.className = 'batch-card';
