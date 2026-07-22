@@ -103,8 +103,8 @@ def load_sample(filename):
     if img is not None:
         H, W = img.shape[:2]
         mid_img = img[:, int(W*0.15):int(W*0.85)]
-        row_max = np.max(mid_img, axis=1)
-        non_black_rows = np.where(row_max > 10)[0]
+        row_non_black_ratio = np.mean(mid_img > 10, axis=1)
+        non_black_rows = np.where(row_non_black_ratio > 0.05)[0]
         if len(non_black_rows) > 0:
             first_non_black = non_black_rows[0]
             
