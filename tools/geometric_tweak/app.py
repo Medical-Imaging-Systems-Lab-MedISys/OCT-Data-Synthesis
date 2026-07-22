@@ -834,16 +834,16 @@ HTML_TEMPLATE = """
                         const card = document.createElement('div');
                         card.className = 'batch-card';
                         
-                        const imgUrl = `/api/render_augment?filename=\${encodeURIComponent(sample.filename)}&amplitude=\${v.amplitude}&center=\${v.center}&width=\${v.width}&tilt=\${v.tilt}`;
+                        const imgUrl = `/api/render_augment?filename=${encodeURIComponent(sample.filename)}&amplitude=${v.amplitude}&center=${v.center}&width=${v.width}&tilt=${v.tilt}`;
                         
                         card.innerHTML = `
-                            <img src="\${imgUrl}" loading="lazy" alt="Augmented Variant">
+                            <img src="${imgUrl}" loading="lazy" alt="Augmented Variant">
                             <div class="batch-card-info">
-                                <span><strong>Variant #\${vIdx + 1}</strong></span>
-                                <span>Amp: <strong>\${v.amplitude}px</strong></span>
-                                <span>Center: <strong>\${Math.round(v.center * 100)}%</strong></span>
-                                <span>Width: <strong>\${Math.round(v.width * 100)}%</strong></span>
-                                <span>Tilt: <strong>\${v.tilt}px</strong></span>
+                                <span><strong>Variant #${vIdx + 1}</strong></span>
+                                <span>Amp: <strong>${v.amplitude}px</strong></span>
+                                <span>Center: <strong>${Math.round(v.center * 100)}%</strong></span>
+                                <span>Width: <strong>${Math.round(v.width * 100)}%</strong></span>
+                                <span>Tilt: <strong>${v.tilt}px</strong></span>
                             </div>
                         `;
                         scroller.appendChild(card);
@@ -853,7 +853,7 @@ HTML_TEMPLATE = """
                     container.appendChild(row);
                 });
             } catch (err) {
-                container.innerHTML = `<p style="color: #ef4444; text-align: center; padding: 3rem; font-weight: 600;">Error generating batch: \${err}</p>`;
+                container.innerHTML = `<p style="color: #ef4444; text-align: center; padding: 3rem; font-weight: 600;">Error generating batch: ${err}</p>`;
             }
         }
 
@@ -887,7 +887,7 @@ HTML_TEMPLATE = """
         async function updatePreview() {
             if(!currentFilename) return;
             
-            ['orig', 'shift', 'final'].forEach(l => document.getElementById(`loader-\${l}`).style.display = 'block');
+            ['orig', 'shift', 'final'].forEach(l => document.getElementById(`loader-${l}`).style.display = 'block');
             
             const payload = {
                 filename: currentFilename,
@@ -911,7 +911,7 @@ HTML_TEMPLATE = """
                 document.getElementById('img-final').src = 'data:image/png;base64,' + data.final_img;
             }
             
-            ['orig', 'shift', 'final'].forEach(l => document.getElementById(`loader-\${l}`).style.display = 'none');
+            ['orig', 'shift', 'final'].forEach(l => document.getElementById(`loader-${l}`).style.display = 'none');
         }
 
         // Init
