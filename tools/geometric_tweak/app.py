@@ -244,7 +244,20 @@ def get_batch_list():
                 if len(y_indices) > 0:
                     shifted_y = y_indices + dy[x_indices]
                     if not (np.any(shifted_y < 0) or np.any(shifted_y >= H)):
-                        break  # valid parameter set found!
+                        # Check remaining top black gap
+                        min_y_shifted = np.full(W, H, dtype=np.int32)
+                        np.minimum.at(min_y_shifted, x_indices, shifted_y)
+                        has_ret = min_y_shifted < H
+                        if np.any(has_ret):
+                            min_top_y = np.min(min_y_shifted[has_ret])
+                            max_dy = int(np.max(dy))
+                            top_crop = min(max_dy, max(0, min_top_y - 5))
+                        else:
+                            top_crop = max(0, int(np.max(dy)))
+                            
+                        # If remaining gap is too large, reject parameters to avoid black space above
+                        if np.max(dy - top_crop) <= 25:
+                            break  # valid parameter set found!
                 else:
                     break
                     
