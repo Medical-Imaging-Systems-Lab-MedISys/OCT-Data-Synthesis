@@ -134,6 +134,7 @@ def process_image():
     amplitude = float(data.get('amplitude', 0.0))
     center = float(data.get('center', 0.5)) # relative to width
     width = float(data.get('width', 0.2)) # relative to width
+    tilt = float(data.get('tilt', 0.0))
     
     img, mask = load_sample(filename)
     if img is None or mask is None:
@@ -141,7 +142,7 @@ def process_image():
         
     H, W = img.shape[:2]
     
-    # 1. Apply column shift (bending)
+    # 1. Apply column shift (bending + tilt)
     shifted_img = np.zeros_like(img)
     shifted_mask = np.zeros_like(mask)
     if len(mask.shape) == 3 and mask.shape[2] == 4:
@@ -152,7 +153,11 @@ def process_image():
     width_px = width * W
     
     # Gaussian bend
-    dy = amplitude * np.exp(-((x - center_px)**2) / (2 * (width_px**2) + 1e-6))
+    dy_bend = amplitude * np.exp(-((x - center_px)**2) / (2 * (width_px**2) + 1e-6))
+    # Linear tilt (pivot around center of the image W/2)
+    dy_tilt = tilt * (x - W/2) / (W/2)
+    
+    dy = dy_bend + dy_tilt
     dy = np.round(dy).astype(int)
     
     for i in range(W):
@@ -167,24 +172,29 @@ def process_image():
             shifted_img[:, i] = img[:, i]
             shifted_mask[:, i] = mask[:, i]
             
-    # Crop ONLY the pure black zero-padded band created by the shift (max_dy),
-    # preserving the vitreous speckle noise above the retina.
+    # Crop ONLY the pure black zero-padded bands created by the shift.
+    # We crop top_crop from the top (removing downward shift blackness)
+    # and bottom_crop from the bottom (removing upward shift blackness).
     is_bg_shifted = (shifted_mask[:,:,0] == 0) & (shifted_mask[:,:,1] == 0) & (shifted_mask[:,:,2] == 0)
     is_ret_shifted = ~is_bg_shifted
     has_ret_shifted = np.any(is_ret_shifted, axis=0)
     
     max_dy = int(np.max(dy))
+    min_dy = int(np.min(dy))
+    
     if np.any(has_ret_shifted):
         top_y_per_col = np.argmax(is_ret_shifted, axis=0)
         min_top_y = np.min(top_y_per_col[has_ret_shifted])
-        # Ensure we don't slice into the retina even if amplitude is large
+        # Ensure we don't slice into the retina even if amplitude/tilt is large
         top_crop = min(max_dy, max(0, min_top_y - 5))
     else:
-        top_crop = max_dy
+        top_crop = max(0, max_dy)
         
-    if top_crop > 0 and top_crop < shifted_img.shape[0]:
-        shifted_img = shifted_img[top_crop:, :]
-        shifted_mask = shifted_mask[top_crop:, :]
+    bottom_crop = max(0, -min_dy)
+        
+    if top_crop + bottom_crop < shifted_img.shape[0]:
+        shifted_img = shifted_img[top_crop:shifted_img.shape[0] - bottom_crop, :]
+        shifted_mask = shifted_mask[top_crop:shifted_mask.shape[0] - bottom_crop, :]
             
     # 2. Resize to 256x256 then Crop and pad curved as in CFM training
     target_size = (256, 256)
@@ -416,6 +426,11 @@ HTML_TEMPLATE = """
                 <label>Bend Width <span id="val-width">20</span></label>
                 <input type="range" id="width" min="5" max="100" value="20" oninput="updateVal('width'); scheduleUpdate()">
             </div>
+            
+            <div class="control-group">
+                <label>Tilt (Pixels) <span id="val-tilt">0</span></label>
+                <input type="range" id="tilt" min="-100" max="100" value="0" oninput="updateVal('tilt'); scheduleUpdate()">
+            </div>
         </div>
 
         <div class="preview-grid">
@@ -463,6 +478,8 @@ HTML_TEMPLATE = """
             // reset sliders
             document.getElementById('amp').value = 0;
             updateVal('amp');
+            document.getElementById('tilt').value = 0;
+            updateVal('tilt');
             
             updatePreview();
         }
@@ -481,7 +498,8 @@ HTML_TEMPLATE = """
                 filename: currentFilename,
                 amplitude: parseFloat(document.getElementById('amp').value),
                 center: parseFloat(document.getElementById('center').value) / 100.0,
-                width: parseFloat(document.getElementById('width').value) / 100.0
+                width: parseFloat(document.getElementById('width').value) / 100.0,
+                tilt: parseFloat(document.getElementById('tilt').value)
             };
             
             const res = await fetch('/api/process', {
