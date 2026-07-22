@@ -127,6 +127,17 @@ def load_sample(filename):
         elif mask.shape[2] == 3:
             mask = cv2.cvtColor(mask, cv2.COLOR_BGR2BGRA)
             
+    # Dynamically crop top pure black padding (no speckle) from both img and mask
+    if img is not None:
+        row_max = np.max(img, axis=1)
+        non_black_rows = np.where(row_max > 5)[0]
+        if len(non_black_rows) > 0:
+            first_non_black = non_black_rows[0]
+            if first_non_black > 0:
+                img = img[first_non_black:, :]
+                if mask is not None:
+                    mask = mask[first_non_black:, :]
+                    
     return img, mask
 
 def find_default_center(mask):
