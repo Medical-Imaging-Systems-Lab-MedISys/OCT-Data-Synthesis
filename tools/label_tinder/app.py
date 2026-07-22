@@ -733,6 +733,12 @@ HTML_TEMPLATE = """
                 </div>
             </div>
         </div>
+        
+        <!-- Radiologist Annotation Box -->
+        <div style="margin-top: 1rem; width: 320px; display: flex; flex-direction: column; gap: 6px; background: rgba(21, 27, 44, 0.4); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem;">
+            <label style="font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.9rem; color: var(--text-primary);">Radiologist Annotation</label>
+            <textarea id="annotation-input" placeholder="Type diagnostic notes / label comments here..." oninput="saveCurrentAnnotation()" style="width: 100%; height: 60px; background: #1f2937; color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; font-size: 0.85rem; resize: none; outline: none; transition: border-color 0.2s; border: 1px solid rgba(255,255,255,0.08);"></textarea>
+        </div>
 
         <div class="controls">
             <button class="btn btn-undo" onclick="undoLastDecision()">
@@ -890,6 +896,12 @@ HTML_TEMPLATE = """
             }
             // Apply crop masks to the newly generated cards
             updateCropMasks();
+
+            // Set current annotation text
+            const annotInput = document.getElementById("annotation-input");
+            if (annotInput) {
+                annotInput.value = (samples[currentIndex] && samples[currentIndex].annotation) ? samples[currentIndex].annotation : "";
+            }
         }
 
         function updateOpacity(val) {
@@ -1082,6 +1094,7 @@ HTML_TEMPLATE = """
                     category: catId, 
                     filename: filename, 
                     status: status,
+                    annotation: (samples[currentIndex] && samples[currentIndex].annotation) ? samples[currentIndex].annotation : "",
                     crop: {
                         enabled: cropEnabled,
                         mode: preprocessMode,
@@ -1097,6 +1110,12 @@ HTML_TEMPLATE = """
                 currentIndex++;
                 updateStats();
                 renderStack();
+            }
+        }
+
+        function saveCurrentAnnotation() {
+            if (currentIndex < samples.length) {
+                samples[currentIndex].annotation = document.getElementById("annotation-input").value;
             }
         }
 
@@ -1150,6 +1169,9 @@ HTML_TEMPLATE = """
         // Keyboard Event Handlers
         document.addEventListener("keydown", (e) => {
             if (isDragging) return;
+            if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
+                return; // Ignore shortcuts when typing annotations
+            }
             if (e.key === "ArrowLeft" || e.key.toLowerCase() === "a") {
                 swipeLeft();
             } else if (e.key === "ArrowRight" || e.key.toLowerCase() === "d") {
@@ -1203,11 +1225,13 @@ def get_samples():
             continue
             
         status = category_state.get(fn, {}).get("status", "pending")
+        annotation = category_state.get(fn, {}).get("annotation", "")
         samples.append({
             "name": fn,
             "label_path": label_path,
             "real_path": real_path,
-            "status": status
+            "status": status,
+            "annotation": annotation
         })
         
     return jsonify({"samples": samples})
@@ -1264,6 +1288,7 @@ def select_sample():
     filename = data.get("filename")
     status = data.get("status") # 'approved' or 'discarded'
     crop = data.get("crop")
+    annotation = data.get("annotation", "")
     
     if not category or not filename or not status:
         return jsonify({"error": "Missing parameters"}), 400
@@ -1274,6 +1299,7 @@ def select_sample():
     selection_state[category][filename] = {
         "status": status,
         "crop": crop,
+        "annotation": annotation,
         "timestamp": datetime.utcnow().isoformat()
     }
     save_state()
@@ -1313,11 +1339,13 @@ def export_category():
         real_path = find_real_image(label_path, image_index)
         if real_path:
             crop_info = category_state[fn].get("crop")
+            annotation = category_state[fn].get("annotation", "")
             export_data.append({
                 "filename": fn,
                 "label_path": os.path.relpath(label_path, WORKSPACE_DIR),
                 "real_path": os.path.relpath(real_path, WORKSPACE_DIR),
-                "crop": crop_info
+                "crop": crop_info,
+                "annotation": annotation
             })
             
     response_content = json.dumps(export_data, indent=2)
