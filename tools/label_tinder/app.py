@@ -747,14 +747,83 @@ HTML_TEMPLATE = """
             <button class="btn btn-circle btn-discard" onclick="swipeLeft()" title="Discard (A / Left Arrow)">
                 ❌
             </button>
+            <button class="btn" onclick="openEditor()" style="border-color: rgba(59, 130, 246, 0.3); color: var(--accent-primary);" title="Paint/Edit Mask (E)">
+                🎨 Edit Mask
+            </button>
             <button class="btn btn-circle btn-keep" onclick="swipeRight()" title="Keep (D / Right Arrow)">
                 💚
             </button>
         </div>
 
         <div class="keyboard-help">
-            Shortcuts: <kbd>←</kbd> or <kbd>A</kbd> to Discard &nbsp;|&nbsp; <kbd>→</kbd> or <kbd>D</kbd> to Keep<br>
+            Shortcuts: <kbd>←</kbd> or <kbd>A</kbd> to Discard &nbsp;|&nbsp; <kbd>→</kbd> or <kbd>D</kbd> to Keep &nbsp;|&nbsp; <kbd>E</kbd> to Edit Mask<br>
             <kbd>Space</kbd> to toggle Overlay &nbsp;|&nbsp; <kbd>Ctrl+Z</kbd> to Undo last action
+        </div>
+    </div>
+
+    <!-- Annotation Painting Editor Modal -->
+    <div id="editor-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 7, 12, 0.9); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+        <div style="background: var(--card-bg); border: 1px solid var(--border-color); width: 950px; height: 680px; border-radius: 20px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);">
+            <!-- Header -->
+            <div style="padding: 1.2rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--text-primary);">Layer Painting Editor</h2>
+                <span id="editor-filename" style="font-size: 0.85rem; color: var(--text-secondary); font-family: monospace;">NORMAL1.png</span>
+            </div>
+            
+            <!-- Main Content Container -->
+            <div style="flex: 1; display: flex; overflow: hidden;">
+                <!-- Left Panel: Tool Configuration -->
+                <div style="width: 280px; border-right: 1px solid var(--border-color); padding: 1.2rem; display: flex; flex-direction: column; gap: 1.2rem; overflow-y: auto;">
+                    <!-- Layer Palette Selector -->
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Select Layer to Paint</label>
+                        <div style="display: flex; flex-direction: column; gap: 6px;" id="layer-palette">
+                            <!-- Populated in JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Brush Slider -->
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <span>Brush Size</span>
+                            <span id="brush-size-val">5px</span>
+                        </label>
+                        <input type="range" id="brush-slider" min="1" max="30" value="5" oninput="updateBrushSize(this.value)" style="width: 100%; height: 6px; background: #1f2937; border-radius: 3px; outline: none; appearance: none; cursor: pointer;">
+                    </div>
+
+                    <!-- Zoom Slider -->
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <span>Zoom Scale</span>
+                            <span id="zoom-val">150%</span>
+                        </label>
+                        <input type="range" id="zoom-slider" min="1" max="5" step="0.2" value="1.5" oninput="updateZoom(this.value)" style="width: 100%; height: 6px; background: #1f2937; border-radius: 3px; outline: none; appearance: none; cursor: pointer;">
+                    </div>
+
+                    <!-- Editor Opacity Slider -->
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; display: flex; justify-content: space-between; margin-bottom: 6px;">
+                            <span>Mask Opacity</span>
+                            <span id="editor-opacity-val">60%</span>
+                        </label>
+                        <input type="range" id="editor-opacity-slider" min="0" max="100" value="60" oninput="updateEditorOpacity(this.value)" style="width: 100%; height: 6px; background: #1f2937; border-radius: 3px; outline: none; appearance: none; cursor: pointer;">
+                    </div>
+                </div>
+                
+                <!-- Center Canvas Scroll Viewport -->
+                <div style="flex: 1; background: #080b12; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 2rem; position: relative;" id="canvas-scroll-container">
+                    <div style="position: relative;" id="canvas-wrapper">
+                        <!-- Dual canvases: display showing Bgr OCT + color-shaded labels -->
+                        <canvas id="editor-canvas" style="display: block; cursor: crosshair; image-rendering: pixelated; box-shadow: 0 4px 20px rgba(0,0,0,0.6);"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div style="padding: 1rem 1.2rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; background: rgba(21, 27, 44, 0.4);">
+                <button class="btn" onclick="closeEditor()" style="padding: 0.6rem 1.2rem;">Cancel</button>
+                <button class="btn btn-keep" onclick="saveEditorMask()" style="padding: 0.6rem 1.5rem; background: var(--accent-success); color: white; border-color: var(--accent-success);">Save Changes</button>
+            </div>
         </div>
     </div>
 
@@ -774,6 +843,47 @@ HTML_TEMPLATE = """
         let bottomCropY = 100;
         let maskColor = 'black';
         let preprocessMode = 'mask';
+
+        // Painting Editor Variables
+        let editorActive = false;
+        let editorCanvas = null;
+        let editorCtx = null;
+        let offscreenMaskCanvas = null;
+        let offscreenMaskCtx = null;
+        let editorBgImage = new Image();
+        let selectedLayerId = 1; // Default to Red (ILM)
+        let editorBrushSize = 5;
+        let editorZoomScale = 1.5;
+        let editorOpacityValue = 60;
+        let isDrawingMask = false;
+        let lastDrawX = 0;
+        let lastDrawY = 0;
+
+        const CLASS_COLORS = {
+            0: [0, 0, 0, 0],         // Vitreous Humor (Transparent)
+            1: [255, 0, 0, 255],     // Red (ILM)
+            2: [0, 128, 128, 255],   // Olive (NFL)
+            3: [255, 255, 0, 255],   // Yellow (IPL/INL)
+            4: [0, 128, 0, 255],     // DarkGreen (OPL)
+            5: [0, 255, 0, 255],     // BrightGreen (ONL)
+            6: [0, 255, 255, 255],   // Cyan (ELM/IS)
+            7: [0, 0, 255, 255],     // Blue (OS/RPE)
+            8: [255, 0, 255, 255],   // Magenta (RPE/Chor)
+            9: [0, 0, 0, 180]        // Deep Sclera (Dark semi-transparent)
+        };
+
+        const LAYERS = [
+            { id: 0, name: "Vitreous Humor (Erase)", color: "#1f2937" },
+            { id: 1, name: "Red (ILM)", color: "#ff0000" },
+            { id: 2, name: "Olive (NFL)", color: "#008080" },
+            { id: 3, name: "Yellow (IPL/INL)", color: "#ffff00" },
+            { id: 4, name: "DarkGreen (OPL)", color: "#008000" },
+            { id: 5, name: "BrightGreen (ONL)", color: "#00ff00" },
+            { id: 6, name: "Cyan (ELM/IS)", color: "#00ffff" },
+            { id: 7, name: "Blue (OS/RPE)", color: "#0000ff" },
+            { id: 8, name: "Magenta (RPE/Chor)", color: "#ff00ff" },
+            { id: 9, name: "Deep Sclera (Erase)", color: "#374151" }
+        ];
 
         async function loadCategory() {
             const catId = document.getElementById("category-select").value;
@@ -849,13 +959,14 @@ HTML_TEMPLATE = """
 
                 // In overlay mode, overlay the mask on top of the image
                 let imageHtml = "";
+                const cacheBuster = Date.now();
                 if (viewMode === 'overlay') {
                     imageHtml = `
                         <div class="card-image-container">
                             <div class="crop-mask-top"></div>
                             <div class="crop-mask-bottom"></div>
                             <img class="card-image" src="/api/image?path=${encodeURIComponent(sample.real_path)}" alt="Real OCT">
-                            <img class="card-image mask-overlay" id="overlay-${i}" src="/api/image?path=${encodeURIComponent(sample.label_path)}&colormap=jet" style="opacity: ${opacityValue/100};" alt="Mask">
+                            <img class="card-image mask-overlay" id="overlay-${i}" src="/api/image?path=${encodeURIComponent(sample.label_path)}&colormap=jet&t=${cacheBuster}" style="opacity: ${opacityValue/100};" alt="Mask">
                         </div>
                     `;
                 } else {
@@ -871,7 +982,7 @@ HTML_TEMPLATE = """
                                 <div class="crop-mask-top"></div>
                                 <div class="crop-mask-bottom"></div>
                                 <span class="side-by-side-label">Pseudo-Label</span>
-                                <img class="card-image" src="/api/image?path=${encodeURIComponent(sample.label_path)}&colormap=jet" alt="Mask">
+                                <img class="card-image" src="/api/image?path=${encodeURIComponent(sample.label_path)}&colormap=jet&t=${cacheBuster}" alt="Mask">
                             </div>
                         </div>
                     `;
@@ -1119,6 +1230,260 @@ HTML_TEMPLATE = """
             }
         }
 
+        // Painting Editor Functions
+        function openEditor() {
+            if (currentIndex >= samples.length) return;
+            const sample = samples[currentIndex];
+            editorActive = true;
+            document.getElementById("editor-filename").innerText = sample.name;
+            document.getElementById("editor-modal").style.display = "flex";
+
+            // Initialize canvases
+            editorCanvas = document.getElementById("editor-canvas");
+            editorCtx = editorCanvas.getContext("2d");
+            
+            offscreenMaskCanvas = document.createElement("canvas");
+            offscreenMaskCanvas.width = 256;
+            offscreenMaskCanvas.height = 256;
+            offscreenMaskCtx = offscreenMaskCanvas.getContext("2d");
+
+            // Setup Sliders UI
+            document.getElementById("brush-slider").value = editorBrushSize;
+            document.getElementById("brush-size-val").innerText = `${editorBrushSize}px`;
+            document.getElementById("zoom-slider").value = editorZoomScale;
+            document.getElementById("zoom-val").innerText = `${Math.round(editorZoomScale * 100)}%`;
+            document.getElementById("editor-opacity-slider").value = editorOpacityValue;
+            document.getElementById("editor-opacity-val").innerText = `${editorOpacityValue}%`;
+
+            // Populate Layer Palette
+            const palette = document.getElementById("layer-palette");
+            palette.innerHTML = "";
+            LAYERS.forEach(layer => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "btn";
+                btn.style.width = "100%";
+                btn.style.padding = "6px 10px";
+                btn.style.borderRadius = "8px";
+                btn.style.fontSize = "0.8rem";
+                btn.style.justifyContent = "flex-start";
+                btn.style.border = `1px solid ${selectedLayerId === layer.id ? 'var(--accent-primary)' : 'var(--border-color)'}`;
+                btn.style.backgroundColor = selectedLayerId === layer.id ? 'rgba(59, 130, 246, 0.15)' : 'transparent';
+                
+                btn.innerHTML = `
+                    <span style="width: 14px; height: 14px; border-radius: 4px; background-color: ${layer.color}; display: inline-block; margin-right: 8px; border: 1px solid rgba(255,255,255,0.2);"></span>
+                    <span>${layer.name}</span>
+                `;
+                btn.onclick = () => selectEditorLayer(layer.id);
+                palette.appendChild(btn);
+            });
+
+            // Set canvas display dimensions
+            editorCanvas.width = 256;
+            editorCanvas.height = 256;
+            updateZoom(editorZoomScale);
+
+            // Load background real image
+            editorBgImage = new Image();
+            editorBgImage.onload = () => {
+                // Load mask
+                const maskImg = new Image();
+                maskImg.onload = () => {
+                    // Draw original mask to offscreen canvas
+                    offscreenMaskCtx.drawImage(maskImg, 0, 0, 256, 256);
+                    editorRedraw();
+                    setupEditorCanvasEvents();
+                };
+                // Use cache buster
+                maskImg.src = `/api/image?path=${encodeURIComponent(sample.label_path)}&t=${Date.now()}`;
+            };
+            editorBgImage.src = `/api/image?path=${encodeURIComponent(sample.real_path)}`;
+        }
+
+        function selectEditorLayer(layerId) {
+            selectedLayerId = layerId;
+            openEditor(); // Re-render palette list to highlight selection
+        }
+
+        function updateBrushSize(val) {
+            editorBrushSize = parseInt(val);
+            document.getElementById("brush-size-val").innerText = `${val}px`;
+        }
+
+        function updateZoom(val) {
+            editorZoomScale = parseFloat(val);
+            document.getElementById("zoom-val").innerText = `${Math.round(editorZoomScale * 100)}%`;
+            editorCanvas.style.width = `${256 * editorZoomScale}px`;
+            editorCanvas.style.height = `${256 * editorZoomScale}px`;
+        }
+
+        function updateEditorOpacity(val) {
+            editorOpacityValue = parseInt(val);
+            document.getElementById("editor-opacity-val").innerText = `${val}%`;
+            editorRedraw();
+        }
+
+        function closeEditor() {
+            editorActive = false;
+            document.getElementById("editor-modal").style.display = "none";
+        }
+
+        function editorRedraw() {
+            if (!editorCtx || !editorBgImage.complete) return;
+            
+            // 1. Draw base scan
+            editorCtx.drawImage(editorBgImage, 0, 0, 256, 256);
+            
+            // 2. Draw transparency blended color mask overlay
+            const maskData = offscreenMaskCtx.getImageData(0, 0, 256, 256);
+            const overlayData = editorCtx.createImageData(256, 256);
+            const opacity = editorOpacityValue / 100;
+
+            for (let i = 0; i < maskData.data.length; i += 4) {
+                const classId = maskData.data[i]; // Grayscale class code (0-9)
+                const color = CLASS_COLORS[classId] || [0, 0, 0, 0];
+                
+                if (classId > 0 && classId < 9) {
+                    overlayData.data[i] = color[0];
+                    overlayData.data[i+1] = color[1];
+                    overlayData.data[i+2] = color[2];
+                    overlayData.data[i+3] = color[3] * opacity;
+                } else if (classId === 9) {
+                    // Deep sclera
+                    overlayData.data[i] = 0;
+                    overlayData.data[i+1] = 0;
+                    overlayData.data[i+2] = 0;
+                    overlayData.data[i+3] = 120 * opacity;
+                } else {
+                    // Vitreous humor (class 0)
+                    overlayData.data[i] = 0;
+                    overlayData.data[i+1] = 0;
+                    overlayData.data[i+2] = 0;
+                    overlayData.data[i+3] = 0;
+                }
+            }
+
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = 256;
+            tempCanvas.height = 256;
+            tempCanvas.getContext("2d").putImageData(overlayData, 0, 0);
+            
+            editorCtx.drawImage(tempCanvas, 0, 0);
+        }
+
+        function setupEditorCanvasEvents() {
+            // Unbind existing events to avoid leaks
+            editorCanvas.replaceWith(editorCanvas.cloneNode(true));
+            editorCanvas = document.getElementById("editor-canvas");
+            editorCtx = editorCanvas.getContext("2d");
+
+            editorCanvas.addEventListener("mousedown", startDrawing);
+            editorCanvas.addEventListener("mousemove", drawStroke);
+            editorCanvas.addEventListener("mouseup", stopDrawing);
+            editorCanvas.addEventListener("mouseleave", stopDrawing);
+
+            editorCanvas.addEventListener("touchstart", (e) => {
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent("mousedown", {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                editorCanvas.dispatchEvent(mouseEvent);
+            }, { passive: true });
+
+            editorCanvas.addEventListener("touchmove", (e) => {
+                const touch = e.touches[0];
+                const mouseEvent = new MouseEvent("mousemove", {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY
+                });
+                editorCanvas.dispatchEvent(mouseEvent);
+                e.preventDefault();
+            }, { passive: false });
+
+            editorCanvas.addEventListener("touchend", () => {
+                const mouseEvent = new MouseEvent("mouseup", {});
+                editorCanvas.dispatchEvent(mouseEvent);
+            }, { passive: true });
+
+            function getCoords(e) {
+                const rect = editorCanvas.getBoundingClientRect();
+                const scaleX = editorCanvas.width / rect.width;
+                const scaleY = editorCanvas.height / rect.height;
+                return {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                };
+            }
+
+            function startDrawing(e) {
+                isDrawingMask = true;
+                const coords = getCoords(e);
+                lastDrawX = coords.x;
+                lastDrawY = coords.y;
+                drawPixel(coords.x, coords.y);
+            }
+
+            function drawStroke(e) {
+                if (!isDrawingMask) return;
+                const coords = getCoords(e);
+                
+                // Draw a solid line on the offscreen mask using the classId fillStyle
+                offscreenMaskCtx.strokeStyle = `rgb(${selectedLayerId}, ${selectedLayerId}, ${selectedLayerId})`;
+                offscreenMaskCtx.fillStyle = `rgb(${selectedLayerId}, ${selectedLayerId}, ${selectedLayerId})`;
+                offscreenMaskCtx.lineWidth = editorBrushSize;
+                offscreenMaskCtx.lineCap = "round";
+                offscreenMaskCtx.lineJoin = "round";
+
+                offscreenMaskCtx.beginPath();
+                offscreenMaskCtx.moveTo(lastDrawX, lastDrawY);
+                offscreenMaskCtx.lineTo(coords.x, coords.y);
+                offscreenMaskCtx.stroke();
+
+                lastDrawX = coords.x;
+                lastDrawY = coords.y;
+                
+                editorRedraw();
+            }
+
+            function drawPixel(x, y) {
+                offscreenMaskCtx.fillStyle = `rgb(${selectedLayerId}, ${selectedLayerId}, ${selectedLayerId})`;
+                offscreenMaskCtx.beginPath();
+                offscreenMaskCtx.arc(x, y, editorBrushSize / 2, 0, Math.PI * 2);
+                offscreenMaskCtx.fill();
+                editorRedraw();
+            }
+
+            function stopDrawing() {
+                isDrawingMask = false;
+            }
+        }
+
+        async function saveEditorMask() {
+            if (currentIndex >= samples.length) return;
+            const sample = samples[currentIndex];
+            const catId = document.getElementById("category-select").value;
+            
+            const dataUrl = offscreenMaskCanvas.toDataURL("image/png");
+            
+            const res = await fetch("/api/save_mask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    category: catId,
+                    filename: sample.name,
+                    mask_data: dataUrl
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                closeEditor();
+                // Reload stack to refresh card with cache-busting
+                renderStack();
+            }
+        }
+
         function swipeLeft() {
             if (currentIndex >= samples.length) return;
             const card = activeCard;
@@ -1172,10 +1537,18 @@ HTML_TEMPLATE = """
             if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
                 return; // Ignore shortcuts when typing annotations
             }
+            if (editorActive) {
+                if (e.key === "Escape") {
+                    closeEditor();
+                }
+                return;
+            }
             if (e.key === "ArrowLeft" || e.key.toLowerCase() === "a") {
                 swipeLeft();
             } else if (e.key === "ArrowRight" || e.key.toLowerCase() === "d") {
                 swipeRight();
+            } else if (e.key.toLowerCase() === "e") {
+                openEditor();
             } else if (e.key === " ") {
                 e.preventDefault();
                 // Toggle overlay opacity between 0 and 60
@@ -1320,6 +1693,35 @@ def undo_decision():
         return jsonify({"success": True})
         
     return jsonify({"error": "Item not found to undo"}), 404
+
+@app.route("/api/save_mask", methods=["POST"])
+def save_mask():
+    data = request.json
+    category = data.get("category")
+    filename = data.get("filename")
+    mask_data_url = data.get("mask_data")
+    
+    if not category or not filename or not mask_data_url:
+        return jsonify({"error": "Missing parameters"}), 400
+        
+    import base64
+    header, encoded = mask_data_url.split(",", 1)
+    img_bytes = base64.b64decode(encoded)
+    
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    mask_img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+    
+    # Extract grayscale / first channel which contains exact class ID values (0-9)
+    if len(mask_img.shape) == 3:
+        mask_gray = mask_img[:, :, 0]
+    else:
+        mask_gray = mask_img
+        
+    category_dir = os.path.join(DATA_DIR, "pseudo_labels", category)
+    dest_path = os.path.join(category_dir, filename)
+    cv2.imwrite(dest_path, mask_gray)
+    
+    return jsonify({"success": True})
 
 @app.route("/api/export")
 def export_category():
