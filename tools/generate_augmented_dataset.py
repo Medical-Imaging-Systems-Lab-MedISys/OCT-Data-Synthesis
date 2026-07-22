@@ -210,13 +210,13 @@ def main():
     shuffled_files = files.copy()
     random.shuffle(shuffled_files)
     
-    # Split proportions: 80% train, 15% val, 5% test
+    # Split proportions: 80% train, 15% test, 5% val
     n_train = int(0.80 * num_samples)
-    n_val = int(0.15 * num_samples)
+    n_test = int(0.15 * num_samples)
     
     train_files = shuffled_files[:n_train]
-    val_files = shuffled_files[n_train:n_train + n_val]
-    test_files = shuffled_files[n_train + n_val:]
+    test_files = shuffled_files[n_train:n_train + n_test]
+    val_files = shuffled_files[n_train + n_test:]
     
     splits = {
         "train": train_files,
