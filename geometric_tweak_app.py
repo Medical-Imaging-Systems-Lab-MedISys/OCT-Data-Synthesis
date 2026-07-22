@@ -25,7 +25,7 @@ def find_free_port(start_port=3003):
             port += 1
     return start_port
 
-def crop_and_pad_curved(image, mask_bgra):
+def crop_and_pad_curved(image, mask_bgra, orig_image=None):
     H, W = image.shape[:2]
     is_bg = (mask_bgra[:, :, 0] == 0) & (mask_bgra[:, :, 1] == 0) & (mask_bgra[:, :, 2] == 0)
     is_retina = ~is_bg
@@ -45,7 +45,16 @@ def crop_and_pad_curved(image, mask_bgra):
     
     safe_bottom = H - 20
     safe_top = max(0, safe_bottom - 50)
-    bottom_patch = image[safe_top:safe_bottom]
+    
+    if orig_image is not None:
+        if orig_image.shape[:2] != (H, W):
+            orig_resized = cv2.resize(orig_image, (W, H), interpolation=cv2.INTER_LINEAR)
+        else:
+            orig_resized = orig_image
+        bottom_patch = orig_resized[safe_top:safe_bottom]
+    else:
+        bottom_patch = image[safe_top:safe_bottom]
+        
     patch_height = bottom_patch.shape[0]
     
     tiles_needed = int(np.ceil(max_dim / patch_height)) if patch_height > 0 else 1
@@ -219,7 +228,10 @@ def process_image():
     img_squashed = cv2.resize(shifted_img, target_size, interpolation=cv2.INTER_LINEAR)
     mask_squashed = cv2.resize(shifted_mask, target_size, interpolation=cv2.INTER_NEAREST)
     
-    final_img = crop_and_pad_curved(img_squashed, mask_squashed)
+    # Resize original watermark-cleaned image to match H, W for bottom patch extraction
+    orig_img_256 = cv2.resize(img, target_size, interpolation=cv2.INTER_LINEAR)
+    
+    final_img = crop_and_pad_curved(img_squashed, mask_squashed, orig_image=orig_img_256)
     final_mask = crop_and_pad_curved(mask_squashed, mask_squashed)
     
     return jsonify({
