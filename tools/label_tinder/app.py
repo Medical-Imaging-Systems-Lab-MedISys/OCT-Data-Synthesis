@@ -744,11 +744,11 @@ HTML_TEMPLATE = """
             <button class="btn btn-undo" onclick="undoLastDecision()">
                 ↩️ Undo
             </button>
-            <button class="btn btn-circle btn-discard" onclick="swipeLeft()" title="Discard (A / Left Arrow)">
-                ❌
-            </button>
             <button class="btn" onclick="openEditor()" style="border-color: rgba(59, 130, 246, 0.3); color: var(--accent-primary);" title="Paint/Edit Mask (E)">
                 🎨 Edit Mask
+            </button>
+            <button class="btn btn-circle btn-discard" onclick="swipeLeft()" title="Discard (A / Left Arrow)">
+                ❌
             </button>
             <button class="btn btn-circle btn-keep" onclick="swipeRight()" title="Keep (D / Right Arrow)">
                 💚
@@ -1301,16 +1301,21 @@ HTML_TEMPLATE = """
                 // Load mask
                 const maskImg = new Image();
                 maskImg.onload = () => {
-                    // Draw original mask to offscreen canvas
-                    offscreenMaskCtx.drawImage(maskImg, 0, 0, 256, 256);
+                    // Set offscreen mask canvas to match native mask image dimensions (pixel perfect)
+                    offscreenMaskCanvas.width = maskImg.naturalWidth || 256;
+                    offscreenMaskCanvas.height = maskImg.naturalHeight || 256;
+                    
+                    offscreenMaskCtx.imageSmoothingEnabled = false;
+                    offscreenMaskCtx.drawImage(maskImg, 0, 0);
+                    
                     // Push initial state to history stack
-                    historyStack = [offscreenMaskCtx.getImageData(0, 0, 256, 256)];
+                    historyStack = [offscreenMaskCtx.getImageData(0, 0, offscreenMaskCanvas.width, offscreenMaskCanvas.height)];
                     redoStack = [];
                     editorRedraw();
                     setupEditorCanvasEvents();
                 };
-                // Use cache buster
-                maskImg.src = `/api/image?path=${encodeURIComponent(sample.label_path)}&t=${Date.now()}`;
+                // Use cache buster and raw=1 to scale label classes by 25 for safe browser sRGB decoding
+                maskImg.src = `/api/image?path=${encodeURIComponent(sample.label_path)}&raw=1&t=${Date.now()}`;
             };
             editorBgImage.src = `/api/image?path=${encodeURIComponent(sample.real_path)}`;
         }
@@ -1350,12 +1355,20 @@ HTML_TEMPLATE = """
             editorCtx.drawImage(editorBgImage, 0, 0, 256, 256);
             
             // 2. Draw transparency blended color mask overlay
-            const maskData = offscreenMaskCtx.getImageData(0, 0, 256, 256);
-            const overlayData = editorCtx.createImageData(256, 256);
+            const W = offscreenMaskCanvas.width;
+            const H = offscreenMaskCanvas.height;
+            const maskData = offscreenMaskCtx.getImageData(0, 0, W, H);
+            
+            const tempCanvas = document.createElement("canvas");
+            tempCanvas.width = W;
+            tempCanvas.height = H;
+            const tempCtx = tempCanvas.getContext("2d");
+            const overlayData = tempCtx.createImageData(W, H);
             const opacity = editorOpacityValue / 100;
 
             for (let i = 0; i < maskData.data.length; i += 4) {
-                const classId = maskData.data[i]; // Grayscale class code (0-9)
+                // Decode mask value (scaled by 25) with rounding to filter color profile shifts
+                const classId = Math.round(maskData.data[i] / 25);
                 const color = CLASS_COLORS[classId] || [0, 0, 0, 0];
                 
                 if (classId > 0 && classId < 9) {
@@ -1378,12 +1391,11 @@ HTML_TEMPLATE = """
                 }
             }
 
-            const tempCanvas = document.createElement("canvas");
-            tempCanvas.width = 256;
-            tempCanvas.height = 256;
-            tempCanvas.getContext("2d").putImageData(overlayData, 0, 0);
+            tempCtx.putImageData(overlayData, 0, 0);
             
-            editorCtx.drawImage(tempCanvas, 0, 0);
+            // Draw overlay scaled to 256x256 without smoothing/interpolation
+            editorCtx.imageSmoothingEnabled = false;
+            editorCtx.drawImage(tempCanvas, 0, 0, 256, 256);
         }
 
         function setupEditorCanvasEvents() {
@@ -1423,8 +1435,8 @@ HTML_TEMPLATE = """
 
             function getCoords(e) {
                 const rect = editorCanvas.getBoundingClientRect();
-                const scaleX = editorCanvas.width / rect.width;
-                const scaleY = editorCanvas.height / rect.height;
+                const scaleX = offscreenMaskCanvas.width / rect.width;
+                const scaleY = offscreenMaskCanvas.height / rect.height;
                 return {
                     x: (e.clientX - rect.left) * scaleX,
                     y: (e.clientY - rect.top) * scaleY
@@ -1443,10 +1455,12 @@ HTML_TEMPLATE = """
                 if (!isDrawingMask) return;
                 const coords = getCoords(e);
                 
-                // Draw a solid line on the offscreen mask using the classId fillStyle
-                offscreenMaskCtx.strokeStyle = `rgb(${selectedLayerId}, ${selectedLayerId}, ${selectedLayerId})`;
-                offscreenMaskCtx.fillStyle = `rgb(${selectedLayerId}, ${selectedLayerId}, ${selectedLayerId})`;
-                offscreenMaskCtx.lineWidth = editorBrushSize;
+                const nativeBrushSize = editorBrushSize * (offscreenMaskCanvas.width / 256.0);
+                const drawColor = selectedLayerId * 25;
+                
+                offscreenMaskCtx.strokeStyle = `rgb(${drawColor}, ${drawColor}, ${drawColor})`;
+                offscreenMaskCtx.fillStyle = `rgb(${drawColor}, ${drawColor}, ${drawColor})`;
+                offscreenMaskCtx.lineWidth = nativeBrushSize;
                 offscreenMaskCtx.lineCap = "round";
                 offscreenMaskCtx.lineJoin = "round";
 
@@ -1462,9 +1476,11 @@ HTML_TEMPLATE = """
             }
 
             function drawPixel(x, y) {
-                offscreenMaskCtx.fillStyle = `rgb(${selectedLayerId}, ${selectedLayerId}, ${selectedLayerId})`;
+                const nativeBrushSize = editorBrushSize * (offscreenMaskCanvas.width / 256.0);
+                const drawColor = selectedLayerId * 25;
+                offscreenMaskCtx.fillStyle = `rgb(${drawColor}, ${drawColor}, ${drawColor})`;
                 offscreenMaskCtx.beginPath();
-                offscreenMaskCtx.arc(x, y, editorBrushSize / 2, 0, Math.PI * 2);
+                offscreenMaskCtx.arc(x, y, nativeBrushSize / 2, 0, Math.PI * 2);
                 offscreenMaskCtx.fill();
                 editorRedraw();
             }
@@ -1661,8 +1677,18 @@ def get_samples():
 def get_image():
     img_path = request.args.get("path")
     colormap = request.args.get("colormap")
+    raw = request.args.get("raw")
     if not img_path or not os.path.exists(img_path):
         return jsonify({"error": "Image path invalid or not found"}), 404
+        
+    if raw == "1":
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if img is not None:
+            # Scale mask values by 25 to protect against color-space conversion shifts in browsers
+            img_scaled = (img * 25).astype(np.uint8)
+            _, buf = cv2.imencode(".png", img_scaled)
+            from io import BytesIO
+            return send_file(BytesIO(buf.tobytes()), mimetype="image/png")
         
     if colormap == "jet":
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
@@ -1759,11 +1785,13 @@ def save_mask():
     nparr = np.frombuffer(img_bytes, np.uint8)
     mask_img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
     
-    # Extract grayscale / first channel which contains exact class ID values (0-9)
+    # Extract first channel (Red) and map from scaled values (0-225) back to class IDs (0-9)
     if len(mask_img.shape) == 3:
-        mask_gray = mask_img[:, :, 0]
+        mask_gray = mask_img[:, :, 2] # Read Red channel (OpenCV BGR order)
     else:
         mask_gray = mask_img
+        
+    mask_gray = np.round(mask_gray / 25.0).astype(np.uint8)
         
     category_dir = os.path.join(DATA_DIR, "pseudo_labels", category)
     dest_path = os.path.join(category_dir, filename)
