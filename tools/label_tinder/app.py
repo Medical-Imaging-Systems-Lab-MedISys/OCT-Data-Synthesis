@@ -808,6 +808,16 @@ HTML_TEMPLATE = """
                         </label>
                         <input type="range" id="editor-opacity-slider" min="0" max="100" value="60" oninput="updateEditorOpacity(this.value)" style="width: 100%; height: 6px; background: #1f2937; border-radius: 3px; outline: none; appearance: none; cursor: pointer;">
                     </div>
+
+                    <!-- Undo / Redo Buttons -->
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="btn" type="button" onclick="editorUndo()" style="flex: 1; justify-content: center; padding: 6px 0; font-size: 0.8rem; border-radius: 8px;" title="Undo Stroke (Ctrl+Z)">
+                            ↩️ Undo
+                        </button>
+                        <button class="btn" type="button" onclick="editorRedo()" style="flex: 1; justify-content: center; padding: 6px 0; font-size: 0.8rem; border-radius: 8px;" title="Redo Stroke (Ctrl+Y)">
+                            ↪️ Redo
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Center Canvas Scroll Viewport -->
@@ -858,6 +868,8 @@ HTML_TEMPLATE = """
         let isDrawingMask = false;
         let lastDrawX = 0;
         let lastDrawY = 0;
+        let historyStack = [];
+        let redoStack = [];
 
         const CLASS_COLORS = {
             0: [0, 0, 0, 0],         // Vitreous Humor (Transparent)
@@ -1291,6 +1303,9 @@ HTML_TEMPLATE = """
                 maskImg.onload = () => {
                     // Draw original mask to offscreen canvas
                     offscreenMaskCtx.drawImage(maskImg, 0, 0, 256, 256);
+                    // Push initial state to history stack
+                    historyStack = [offscreenMaskCtx.getImageData(0, 0, 256, 256)];
+                    redoStack = [];
                     editorRedraw();
                     setupEditorCanvasEvents();
                 };
@@ -1455,7 +1470,11 @@ HTML_TEMPLATE = """
             }
 
             function stopDrawing() {
-                isDrawingMask = false;
+                if (isDrawingMask) {
+                    isDrawingMask = false;
+                    historyStack.push(offscreenMaskCtx.getImageData(0, 0, 256, 256));
+                    redoStack = []; // Clear redo stack on new action
+                }
             }
         }
 
@@ -1481,6 +1500,25 @@ HTML_TEMPLATE = """
                 closeEditor();
                 // Reload stack to refresh card with cache-busting
                 renderStack();
+            }
+        }
+
+        function editorUndo() {
+            if (historyStack.length > 1) {
+                const current = historyStack.pop();
+                redoStack.push(current);
+                const previous = historyStack[historyStack.length - 1];
+                offscreenMaskCtx.putImageData(previous, 0, 0);
+                editorRedraw();
+            }
+        }
+
+        function editorRedo() {
+            if (redoStack.length > 0) {
+                const next = redoStack.pop();
+                historyStack.push(next);
+                offscreenMaskCtx.putImageData(next, 0, 0);
+                editorRedraw();
             }
         }
 
@@ -1540,6 +1578,16 @@ HTML_TEMPLATE = """
             if (editorActive) {
                 if (e.key === "Escape") {
                     closeEditor();
+                } else if (e.key.toLowerCase() === "z" && e.ctrlKey) {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        editorRedo(); // Ctrl+Shift+Z
+                    } else {
+                        editorUndo(); // Ctrl+Z
+                    }
+                } else if (e.key.toLowerCase() === "y" && e.ctrlKey) {
+                    e.preventDefault();
+                    editorRedo(); // Ctrl+Y
                 }
                 return;
             }
