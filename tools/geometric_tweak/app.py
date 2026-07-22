@@ -190,10 +190,10 @@ def get_batch_list():
         # Generate 10 randomized parameters per file
         variants = []
         for _ in range(10):
-            amp = random.uniform(85, 105)
-            center = random.uniform(0.45, 0.55)
-            width = random.uniform(0.35, 0.45)
-            tilt = random.uniform(-10, 10)
+            amp = random.uniform(40, 150)
+            center = random.uniform(0.25, 0.75)
+            width = random.uniform(0.20, 0.60)
+            tilt = random.uniform(-35, 35)
             variants.append({
                 "amplitude": round(amp, 2),
                 "center": round(center, 4),
@@ -755,7 +755,7 @@ HTML_TEMPLATE = """
             <div>
                 <h2 style="font-size: 1.5rem; font-weight: 700;">10x10 Randomized Augmentation Grid</h2>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
-                    Generating 10 augmented variants per sample. Ranges: Amplitude 85-105 | Center 45%-55% | Width 35%-45% | Tilt -10 to +10.
+                    Generating 10 augmented variants per sample. Ranges: Amplitude 40-150 | Center 25%-75% | Width 20%-60% | Tilt -35 to +35.
                 </p>
             </div>
             <button class="btn" onclick="loadBatch()">
