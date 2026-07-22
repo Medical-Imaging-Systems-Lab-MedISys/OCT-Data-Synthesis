@@ -8,8 +8,9 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Persistence storage file
-STATE_FILE = "label_selection_state.json"
-WORKSPACE_DIR = "/home/mmk/Codes/oct_data_synthesis"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_FILE = os.path.join(BASE_DIR, "label_selection_state.json")
+WORKSPACE_DIR = os.path.abspath(os.path.join(BASE_DIR, "../.."))
 DATA_DIR = os.path.join(WORKSPACE_DIR, "DATA")
 
 # Load existing state

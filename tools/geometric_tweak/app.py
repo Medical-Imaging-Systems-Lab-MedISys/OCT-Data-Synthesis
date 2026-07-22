@@ -11,8 +11,10 @@ import random
 app = Flask(__name__)
 
 # Config
-DATA_DIR = "DATA/NR206/train"
-MASK_DIR = "DATA/NR206/train_labels"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, "../.."))
+DATA_DIR = os.path.join(REPO_ROOT, "DATA/NR206/train")
+MASK_DIR = os.path.join(REPO_ROOT, "DATA/NR206/train_labels")
 
 def find_free_port(start_port=3003):
     port = start_port

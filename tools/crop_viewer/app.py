@@ -76,8 +76,10 @@ def image_to_base64(img):
 
 @app.route('/')
 def index():
-    data_dir = "./NR206/train"
-    labels_dir = "./NR206/train_labels"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, "../.."))
+    data_dir = os.path.join(REPO_ROOT, "DATA/NR206/train")
+    labels_dir = os.path.join(REPO_ROOT, "DATA/NR206/train_labels")
     
     files = sorted([f for f in os.listdir(data_dir) if f.endswith('.png')])[:5]
     

@@ -73,7 +73,9 @@ def find_free_port(start_port=5000):
     return start_port
 
 if __name__ == '__main__':
-    port = find_free_port(3000)
+    # Find a free port starting from 3002 to avoid conflicts with 3000 (Tinder App) and 3001 (Synthesis Studio)
+    port = find_free_port(3002)
+    
     print("\n" + "="*60)
     print(f"OCT Intensity Profiler Server starting...")
     print(f"Local URL: http://localhost:{port}")
