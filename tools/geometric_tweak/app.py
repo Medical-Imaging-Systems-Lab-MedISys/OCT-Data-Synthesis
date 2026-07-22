@@ -187,12 +187,20 @@ def get_batch_list():
         
     batch_data = []
     for filename in selected_files:
+        # Load mask to get the natural fovea center for this image
+        _, mask = load_sample(filename)
+        c_fovea = 0.5
+        if mask is not None:
+            c_fovea = find_default_center(mask)
+            
         # Generate 10 randomized parameters per file
         variants = []
         for _ in range(10):
             amp = random.uniform(40, 150)
-            center = random.uniform(0.25, 0.75)
-            width = random.uniform(0.20, 0.60)
+            # Center constrained to fovea center +/- 5% relative width
+            center = float(np.clip(c_fovea + random.uniform(-0.05, 0.05), 0.10, 0.90))
+            # Increase bend width (40% to 80%) to make the bends smoother (less steep)
+            width = random.uniform(0.40, 0.80)
             tilt = random.uniform(-35, 35)
             variants.append({
                 "amplitude": round(amp, 2),
@@ -755,7 +763,7 @@ HTML_TEMPLATE = """
             <div>
                 <h2 style="font-size: 1.5rem; font-weight: 700;">10x10 Randomized Augmentation Grid</h2>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
-                    Generating 10 augmented variants per sample. Ranges: Amplitude 40-150 | Center 25%-75% | Width 20%-60% | Tilt -35 to +35.
+                    Generating 10 augmented variants per sample. Ranges: Amplitude 40-150 | Center: Fovea Center ±5% | Width 40%-80% | Tilt -35 to +35.
                 </p>
             </div>
             <button class="btn" onclick="loadBatch()">
