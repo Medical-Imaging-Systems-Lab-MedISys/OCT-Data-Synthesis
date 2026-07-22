@@ -126,6 +126,35 @@ def load_sample(filename):
             
     return img, mask
 
+def find_default_center(mask):
+    """
+    Finds the center of the fovea by identifying where the first retinal layer (Red, [0, 0, 255])
+    reaches its minimum thickness (very thin middle position).
+    """
+    H, W = mask.shape[:2]
+    # Red (ILM) layer is BGR color [0, 0, 255]
+    red_mask = (mask[:, :, 0] == 0) & (mask[:, :, 1] == 0) & (mask[:, :, 2] == 255)
+    thickness = np.sum(red_mask, axis=0) # shape (W,)
+    
+    # Smooth thickness values using a moving average window to eliminate noise/discretization spikes
+    window_size = 21
+    if W > window_size:
+        kernel = np.ones(window_size) / window_size
+        smoothed = np.convolve(thickness, kernel, mode='same')
+    else:
+        smoothed = thickness
+        
+    # Search within the middle 60% of the image to avoid edge/boundary artifacts
+    start = int(0.2 * W)
+    end = int(0.8 * W)
+    
+    if start < end:
+        min_idx = start + np.argmin(smoothed[start:end])
+    else:
+        min_idx = W // 2
+        
+    return float(min_idx) / W
+
 @app.route("/")
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -134,7 +163,16 @@ def index():
 def get_random():
     files = [f for f in os.listdir(DATA_DIR) if f.endswith(('.png', '.jpg'))]
     filename = random.choice(files)
-    return jsonify({"filename": filename})
+    
+    _, mask = load_sample(filename)
+    default_center = 0.5
+    if mask is not None:
+        default_center = find_default_center(mask)
+        
+    return jsonify({
+        "filename": filename,
+        "default_center": default_center
+    })
 
 @app.route("/api/process", methods=['POST'])
 def process_image():
@@ -492,6 +530,11 @@ HTML_TEMPLATE = """
             updateVal('amp');
             document.getElementById('tilt').value = 0;
             updateVal('tilt');
+            
+            // Set bend center slider to calculated default center from backend fovea detector
+            const centerVal = Math.round(data.default_center * 100);
+            document.getElementById('center').value = centerVal;
+            updateVal('center');
             
             updatePreview();
         }
