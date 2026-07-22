@@ -179,6 +179,23 @@ def process_image():
     is_ret_shifted = ~is_bg_shifted
     has_ret_shifted = np.any(is_ret_shifted, axis=0)
     
+    # Find the bottom boundary of the retina (b8) and zero out the fibrous layers below it
+    b8_shifted = np.full(W, H - 1, dtype=np.int32)
+    if np.any(has_ret_shifted):
+        b8_shifted[has_ret_shifted] = H - 1 - np.argmax(is_ret_shifted[::-1, :][:, has_ret_shifted], axis=0)
+        
+    for i in range(W):
+        if has_ret_shifted[i]:
+            y_start = min(H - 1, b8_shifted[i] + 3)
+            shifted_img[y_start:, i] = 0
+        else:
+            shifted_img[:, i] = 0
+            
+    # Recompute background/retina masks after zeroing out the fibrous layers
+    is_bg_shifted = (shifted_mask[:,:,0] == 0) & (shifted_mask[:,:,1] == 0) & (shifted_mask[:,:,2] == 0)
+    is_ret_shifted = ~is_bg_shifted
+    has_ret_shifted = np.any(is_ret_shifted, axis=0)
+    
     max_dy = int(np.max(dy))
     min_dy = int(np.min(dy))
     
